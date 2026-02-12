@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Coup Online</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="brand">COUP Online</div>
+      <div class="room">Sala: <span id="roomCode">----</span></div>
+      <div class="phase" id="phase"></div>
+      <div class="timer" id="timer"></div>
+
+      <button
+        id="eyeBtn"
+        class="btn small"
+        title="Esconder/mostrar suas cartas"
+      >
+        👁️
+      </button>
+    </div>
+
+    <div class="wrap">
+      <!-- ESQUERDA -->
+      <div class="panel left">
+        <div class="hostRow">
+          <div id="hostControls" class="hostControls">
+            <button id="startBtn" class="btn primary">Iniciar (Host)</button>
+            <button id="restartBtn" class="btn">Reiniciar (Host)</button>
+          </div>
+
+          <button id="readyBtn" class="btn">Ficar READY</button>
+        </div>
+
+        <h2>Pessoas na sala</h2>
+        <div id="roomPeople" class="lobby"></div>
+
+        <h2>Fila / Lobby</h2>
+        <div id="lobby" class="lobby"></div>
+
+        <h2>Log</h2>
+        <div id="log" class="log"></div>
+      </div>
+
+      <!-- CENTRO -->
+      <div class="panel main tablePanel">
+        <div id="joinBox" class="joinBox">
+          <h2>Entrar na sala</h2>
+          <p>Digite seu nick (máx 20):</p>
+          <input id="nickInput" maxlength="20" placeholder="Seu nick..." />
+          <button id="joinBtn" class="btn primary">Entrar</button>
+        </div>
+
+        <div id="gameBox" class="gameBox hidden">
+          <div class="topActions">
+            <div id="reactionBox" class="responseBox hidden">
+              <div class="responseHeader">
+                <div>
+                  <div class="responseTitle">Responder à ação</div>
+                  <div id="pendingText" class="responseText"></div>
+                </div>
+                <div class="row">
+                  <button id="acceptBtn" class="btn">Aceitar</button>
+                  <button id="contestBtn" class="btn danger">Contestar</button>
+                  <button id="blockBtn" class="btn">Bloquear</button>
+                </div>
+              </div>
+
+              <div
+                id="blockPickRow"
+                class="row hidden"
+                style="margin-top: 10px"
+              >
+                <button id="blockCaptainBtn" class="btn">
+                  Bloquear como Capitão
+                </button>
+                <button id="blockAmbBtn" class="btn">
+                  Bloquear como Embaixador
+                </button>
+              </div>
+            </div>
+
+            <div id="blockChallengeBox" class="responseBox hidden">
+              <div class="responseHeader">
+                <div>
+                  <div class="responseTitle">Responder ao bloqueio</div>
+                  <div id="blockText" class="responseText"></div>
+                </div>
+                <div class="row">
+                  <button id="blockAcceptBtn" class="btn">
+                    Aceitar bloqueio
+                  </button>
+                  <button id="blockContestBtn" class="btn danger">
+                    Contestar bloqueio
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tableArea">
+            <div class="tableCenter"></div>
+            <div id="tableSeats" class="tableSeats"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DIREITA -->
+      <div class="panel right">
+        <h2>Ações</h2>
+        <div id="actions" class="actions"></div>
+
+        <div id="targetWrap" class="targetRow hidden">
+          <label>Alvo:</label>
+          <select id="targetSelect"></select>
+          <button id="confirmActionBtn" class="btn primary">Confirmar</button>
+        </div>
+
+        <h2>Descarte</h2>
+        <div id="discard" class="discard"></div>
+
+        <h2>Regras rápidas</h2>
+        <div class="rules">
+          <p>
+            <b>10+ moedas</b> no começo do turno = <b>Golpe obrigatório</b>.
+          </p>
+          <p>
+            <b>Bloqueios:</b> Duque bloqueia Ajuda Externa; Condessa bloqueia
+            Assassinato; Capitão/Embaixador bloqueia Roubo.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: perder influência -->
+    <div id="lossModal" class="modal hidden">
+      <div class="modalCard">
+        <h2>Você perdeu uma influência</h2>
+        <p id="lossReason"></p>
+        <p>Escolha qual carta revelar:</p>
+        <div id="lossChoices" class="hand"></div>
+      </div>
+    </div>
+
+    <!-- Modal: exchange -->
+    <div id="exchangeModal" class="modal hidden">
+      <div class="modalCard">
+        <h2>Troca (Embaixador)</h2>
+        <p id="exchangeInfo"></p>
+        <p>Selecione as cartas que você quer manter:</p>
+        <div id="exchangeChoices" class="hand"></div>
+        <div class="row" style="margin-top: 10px">
+          <button id="exchangeConfirmBtn" class="btn primary">Confirmar</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/ui.js"></script>
+    <script src="/client.js"></script>
+  </body>
+</html>
