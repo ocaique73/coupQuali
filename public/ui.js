@@ -1,6 +1,57 @@
 // helpers UI (sem socket)
 
+const ROLE_META = {
+  Duke: {
+    pt: "Duque",
+    icon: "👑",
+    cls: "duke",
+    does: "Taxar: +3 moedas",
+    blocks: "Bloqueia Ajuda Externa",
+  },
+  Assassin: {
+    pt: "Assassino",
+    icon: "🗡️",
+    cls: "assassin",
+    does: "Assassinar: paga 3, alvo perde 1 carta",
+    blocks: "—",
+  },
+  Captain: {
+    pt: "Capitão",
+    icon: "⚓",
+    cls: "captain",
+    does: "Roubar: pega 2 moedas de alguém",
+    blocks: "Bloqueia Roubo",
+  },
+  Ambassador: {
+    pt: "Embaixador",
+    icon: "🎭",
+    cls: "ambassador",
+    does: "Trocar cartas com o baralho",
+    blocks: "Bloqueia Roubo",
+  },
+  Contessa: {
+    pt: "Condessa",
+    icon: "🛡️",
+    cls: "contessa",
+    does: "—",
+    blocks: "Bloqueia Assassinato",
+  },
+};
+
+const ACTION_LABELS = {
+  income: "Renda",
+  foreign_aid: "Ajuda Externa",
+  tax: "Taxar",
+  assassinate: "Assassinar",
+  steal: "Roubar",
+  exchange: "Trocar",
+  coup: "Golpe",
+};
+
 window.UI = {
+  ROLE_META,
+  ACTION_LABELS,
+
   timeLeft(ts) {
     const ms = Math.max(0, ts - Date.now());
     const total = Math.ceil(ms / 1000);
@@ -9,15 +60,39 @@ window.UI = {
     return `${m}:${String(sec).padStart(2, "0")}`;
   },
 
+  secsLeft(ts) {
+    return Math.max(0, Math.ceil((ts - Date.now()) / 1000));
+  },
+
   roleClass(role) {
     if (!role) return "back";
-    const r = role.toLowerCase();
-    if (r === "duke") return "duke";
-    if (r === "assassin") return "assassin";
-    if (r === "captain") return "captain";
-    if (r === "ambassador") return "ambassador";
-    if (r === "contessa") return "contessa";
-    return "back";
+    return ROLE_META[role]?.cls || "back";
+  },
+
+  rolePt(role) {
+    return ROLE_META[role]?.pt || role || "Carta";
+  },
+
+  roleIcon(role) {
+    return ROLE_META[role]?.icon || "🂠";
+  },
+
+  actionLabel(type) {
+    return ACTION_LABELS[type] || (type || "").toUpperCase();
+  },
+
+  escape(s) {
+    return String(s ?? "").replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c],
+    );
   },
 
   // posições em círculo (2..6 perfeito)

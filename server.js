@@ -80,6 +80,10 @@ function getRoom(key) {
       exchange: null,
 
       actionLog: [],
+
+      events: [],
+      eventSeq: 0,
+      winner: null,
     });
   }
   return rooms.get(key);
@@ -87,6 +91,14 @@ function getRoom(key) {
 
 function addLog(room, text) {
   room.actionLog.push({ ts: now(), text });
+}
+
+// Eventos estruturados: o cliente usa isso para saber O QUE aconteceu
+// (e animar), em vez de tentar adivinhar a partir do diff de estado.
+function pushEvent(room, type, data) {
+  room.eventSeq += 1;
+  room.events.push({ seq: room.eventSeq, ts: now(), type, ...data });
+  if (room.events.length > 200) room.events.splice(0, room.events.length - 200);
 }
 
 function findPlayer(room, id) {
@@ -261,6 +273,10 @@ function roomPublicState(room, viewerId) {
 
     discard: room.discard.slice(-30),
     actionLog: room.actionLog.slice(-80),
+
+    deckCount: room.deck.length,
+    winner: room.winner,
+    events: room.events.slice(-40),
   };
 }
 
@@ -272,6 +288,7 @@ function broadcast(room) {
 function endToLobby(room, reason) {
   room.started = false;
   room.phase = "lobby";
+  room.winner = null;
 
   room.pendingAction = null;
   room.reactions = {};
@@ -312,6 +329,7 @@ function startGame(room) {
   for (const p of room.players) p.inGame = p.connected && p.ready;
 
   room.started = true;
+  room.winner = null;
   room.phase = "turn";
   room.deck = makeDeck();
   room.discard = [];
@@ -332,6 +350,13 @@ function startGame(room) {
 
   room.turnIndex = 0;
   room.turnEndsAt = now() + TURN_MS;
+
+  pushEvent(room, "game_start", {
+    playerIds: inGamePlayers(room).map((p) => p.id),
+  });
+
+  const first = inGamePlayers(room)[0];
+  if (first) pushEvent(room, "turn", { playerId: first.id, nick: first.nick });
 
   addLog(room, `Partida iniciada!`);
   return { ok: true };
@@ -359,13 +384,21 @@ function resetToNextTurn(room) {
   room.phase = "turn";
   room.turnIndex = nextAliveIndex(room, room.turnIndex);
   room.turnEndsAt = now() + TURN_MS;
+
+  const cur = inGamePlayers(room)[room.turnIndex];
+  if (cur) pushEvent(room, "turn", { playerId: cur.id, nick: cur.nick });
 }
 
 function checkWin(room) {
   const alive = inGamePlayers(room).filter((p) => isAlive(p));
   if (alive.length === 1 && room.started) {
-    addLog(room, `🏆 ${alive[0].nick} venceu!`);
+    const w = alive[0];
+    addLog(room, `🏆 ${w.nick} venceu!`);
+    pushEvent(room, "winner", { playerId: w.id, nick: w.nick });
     endToLobby(room, `Partida encerrada. Todos voltaram para o lobby.`);
+    // definido DEPOIS do endToLobby (que limpa winner): o overlay de vitória
+    // precisa sobreviver ao reset da sala, senão ninguém vê quem ganhou.
+    room.winner = { playerId: w.id, nick: w.nick, ts: now() };
     return true;
   }
   return false;
@@ -389,7 +422,17 @@ function killSpecificInfluence(room, player, idx, reason) {
     reason,
     ts: now(),
   });
+  pushEvent(room, "card_lost", {
+    playerId: player.id,
+    nick: player.nick,
+    idx,
+    role: c.role,
+  });
   addLog(room, `${player.nick} perdeu influência (${c.role}).`);
+
+  if (!isAlive(player))
+    pushEvent(room, "eliminated", { playerId: player.id, nick: player.nick });
+
   return true;
 }
 
@@ -399,6 +442,12 @@ function actorHasRoleAlive(actor, role) {
 function revealAndReplace(room, actor, role) {
   const idx = actor.hand.findIndex((c) => c.alive && c.role === role);
   if (idx < 0) return;
+  pushEvent(room, "reveal_replace", {
+    playerId: actor.id,
+    nick: actor.nick,
+    idx,
+    role,
+  });
   room.deck = shuffle(room.deck.concat([actor.hand[idx].role]));
   actor.hand[idx].role = draw(room.deck);
 }
@@ -409,6 +458,15 @@ function resolveContest(room, claimedRole, claimedById, challengerId, label) {
   if (!claimer || !challenger) return { ok: false };
 
   const has = actorHasRoleAlive(claimer, claimedRole);
+  pushEvent(room, "challenge_result", {
+    challengerId,
+    challengerNick: challenger.nick,
+    claimerId: claimedById,
+    claimerNick: claimer.nick,
+    claimRole: claimedRole,
+    bluffCaught: !has,
+  });
+
   if (has) {
     addLog(
       room,
@@ -443,16 +501,31 @@ function applyImmediateAction(room, actor, action) {
   switch (action.type) {
     case "income":
       actor.coins += 1;
+      pushEvent(room, "coins", {
+        playerId: actor.id,
+        delta: 1,
+        reason: "income",
+      });
       addLog(room, `${actor.nick} fez RENDA (+1).`);
       return { ok: true };
 
     case "foreign_aid":
       actor.coins += 2;
+      pushEvent(room, "coins", {
+        playerId: actor.id,
+        delta: 2,
+        reason: "foreign_aid",
+      });
       addLog(room, `${actor.nick} pediu AJUDA EXTERNA (+2).`);
       return { ok: true };
 
     case "tax":
       actor.coins += 3;
+      pushEvent(room, "coins", {
+        playerId: actor.id,
+        delta: 3,
+        reason: "tax",
+      });
       addLog(room, `${actor.nick} TAXOU (+3).`);
       return { ok: true };
 
@@ -462,6 +535,11 @@ function applyImmediateAction(room, actor, action) {
       const amt = Math.min(2, target.coins);
       target.coins -= amt;
       actor.coins += amt;
+      pushEvent(room, "steal", {
+        fromId: target.id,
+        toId: actor.id,
+        amount: amt,
+      });
       addLog(room, `${actor.nick} ROUBOU ${amt} de ${target.nick}.`);
       return { ok: true };
     }
@@ -486,6 +564,12 @@ function applyImmediateAction(room, actor, action) {
       const options = shuffle(aliveRoles.concat(drawn));
       const keepCount = aliveRoles.length;
 
+      pushEvent(room, "deck_draw", {
+        playerId: actor.id,
+        nick: actor.nick,
+        count: drawn.length,
+      });
+
       room.phase = "exchange_select";
       room.exchange = {
         actorId: actor.id,
@@ -505,6 +589,12 @@ function applyImmediateAction(room, actor, action) {
         return { ok: false };
       if (actor.coins < 7) return { ok: false };
       actor.coins -= 7;
+      pushEvent(room, "coins", {
+        playerId: actor.id,
+        delta: -7,
+        reason: "coup",
+      });
+      pushEvent(room, "coup", { actorId: actor.id, targetId: target.id });
       addLog(room, `${actor.nick} deu GOLPE em ${target.nick}.`);
       requestLoseInfluence(room, target.id, `Golpe de ${actor.nick}.`, () => {
         if (!checkWin(room)) resetToNextTurn(room);
@@ -689,6 +779,11 @@ function applyExchangeSelection(room, actor, keepRoles) {
   for (let i = 0; i < aliveSlots.length; i++)
     actor.hand[aliveSlots[i]].role = keep[i];
 
+  pushEvent(room, "deck_return", {
+    playerId: actor.id,
+    nick: actor.nick,
+    count: rest.length,
+  });
   addLog(room, `${actor.nick} concluiu TROCA.`);
 }
 
@@ -703,6 +798,11 @@ setInterval(() => {
       if (current && current.connected && isAlive(current)) {
         addLog(room, `${current.nick} não jogou: padrão -> RENDA (+1).`);
         current.coins += 1;
+        pushEvent(room, "coins", {
+          playerId: current.id,
+          delta: 1,
+          reason: "timeout_income",
+        });
       }
       resetToNextTurn(room);
       broadcast(room);
@@ -855,6 +955,11 @@ io.on("connection", (socket) => {
         return;
       }
       actor.coins -= 3;
+      pushEvent(room, "coins", {
+        playerId: actor.id,
+        delta: -3,
+        reason: "assassinate",
+      });
       addLog(room, `${actor.nick} pagou 3 para ASSASSINAR.`);
     }
 
@@ -877,6 +982,13 @@ io.on("connection", (socket) => {
     room.block = null;
     room.reactionEndsAt = now() + RESPONSE_MS;
 
+    pushEvent(room, "action_declared", {
+      actorId: actor.id,
+      actorNick: actor.nick,
+      actionType: type,
+      targetId: action.targetId,
+      claimRole,
+    });
     addLog(room, `${actor.nick} declarou: ${type.toUpperCase()}.`);
     broadcast(room);
   });
@@ -932,6 +1044,11 @@ io.on("connection", (socket) => {
 
     room.block = { blockerId: p.id, blockerNick: p.nick, claimRole };
     room.reactions[p.id] = "block";
+    pushEvent(room, "block", {
+      blockerId: p.id,
+      blockerNick: p.nick,
+      claimRole,
+    });
     addLog(room, `${p.nick} BLOQUEOU (${claimRole}).`);
 
     if (shouldResolveReactionNow(room)) {

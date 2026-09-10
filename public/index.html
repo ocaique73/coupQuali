@@ -8,7 +8,7 @@
   </head>
   <body>
     <div class="topbar">
-      <div class="brand">COUP Online</div>
+      <div class="brand">COUP <span>Online</span></div>
       <div class="room">Sala: <span id="roomCode">----</span></div>
       <div class="phase" id="phase"></div>
       <div class="timer" id="timer"></div>
@@ -62,11 +62,13 @@
                   <div id="pendingText" class="responseText"></div>
                 </div>
                 <div class="row">
-                  <button id="acceptBtn" class="btn">Aceitar</button>
+                  <button id="acceptBtn" class="btn ok">Aceitar</button>
                   <button id="contestBtn" class="btn danger">Contestar</button>
-                  <button id="blockBtn" class="btn">Bloquear</button>
+                  <button id="blockBtn" class="btn warn">Bloquear</button>
                 </div>
               </div>
+
+              <div id="reactionHint" class="responseHint"></div>
 
               <div
                 id="blockPickRow"
@@ -74,10 +76,10 @@
                 style="margin-top: 10px"
               >
                 <button id="blockCaptainBtn" class="btn">
-                  Bloquear como Capitão
+                  ⚓ Bloquear como Capitão
                 </button>
                 <button id="blockAmbBtn" class="btn">
-                  Bloquear como Embaixador
+                  🎭 Bloquear como Embaixador
                 </button>
               </div>
             </div>
@@ -89,7 +91,7 @@
                   <div id="blockText" class="responseText"></div>
                 </div>
                 <div class="row">
-                  <button id="blockAcceptBtn" class="btn">
+                  <button id="blockAcceptBtn" class="btn ok">
                     Aceitar bloqueio
                   </button>
                   <button id="blockContestBtn" class="btn danger">
@@ -97,12 +99,29 @@
                   </button>
                 </div>
               </div>
+              <div id="blockChallengeHint" class="responseHint"></div>
             </div>
           </div>
 
-          <div class="tableArea">
-            <div class="tableCenter"></div>
+          <div class="tableArea" id="tableArea">
+            <div class="tableFelt"></div>
+
+            <div class="tableCenter" id="tableCenter">
+              <div class="deckStack" id="deckStack">
+                <div class="deckCard d3"></div>
+                <div class="deckCard d2"></div>
+                <div class="deckCard d1">
+                  <div class="deckMark">C</div>
+                </div>
+              </div>
+              <div class="deckCount">
+                Baralho: <b id="deckCount">—</b>
+              </div>
+            </div>
+
             <div id="tableSeats" class="tableSeats"></div>
+
+            <div id="centerBanner" class="centerBanner"></div>
           </div>
         </div>
       </div>
@@ -110,13 +129,22 @@
       <!-- DIREITA -->
       <div class="panel right">
         <h2>Ações</h2>
+
+        <div id="turnHint" class="turnHint"></div>
+
+        <div id="targetBar" class="targetBar hidden">
+          <div class="targetBarText">
+            Escolha o alvo de <b id="targetActionName">—</b> na mesa
+          </div>
+          <button id="cancelTargetBtn" class="btn small danger">
+            Cancelar
+          </button>
+        </div>
+
         <div id="actions" class="actions"></div>
 
-        <div id="targetWrap" class="targetRow hidden">
-          <label>Alvo:</label>
-          <select id="targetSelect"></select>
-          <button id="confirmActionBtn" class="btn primary">Confirmar</button>
-        </div>
+        <h2>Cartas do jogo</h2>
+        <div id="roleGuide" class="roleGuide"></div>
 
         <h2>Descarte</h2>
         <div id="discard" class="discard"></div>
@@ -157,8 +185,28 @@
       </div>
     </div>
 
+    <!-- Overlay: vencedor -->
+    <div id="winnerOverlay" class="winnerOverlay hidden">
+      <div id="confettiLayer" class="confettiLayer"></div>
+      <button id="winnerClose" class="winnerClose" title="Fechar">✕</button>
+      <div class="winnerCard">
+        <div class="winnerRays"></div>
+        <div class="trophy">🏆</div>
+        <div class="winnerLabel">VENCEDOR</div>
+        <div class="winnerName" id="winnerName">—</div>
+        <div class="winnerSub">Último a manter influência na mesa</div>
+        <button id="winnerBackBtn" class="btn primary big">
+          Voltar ao lobby
+        </button>
+      </div>
+    </div>
+
+    <!-- camada de animações -->
+    <div id="fxLayer" class="fxLayer"></div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="/ui.js"></script>
+    <script src="/fx.js"></script>
     <script src="/client.js"></script>
   </body>
 </html>
