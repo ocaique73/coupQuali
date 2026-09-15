@@ -366,45 +366,53 @@
       if (!at) return;
       const c = centerOf(at);
 
+      // indicador na LATERAL + polegar para o lado = "L" de verdade.
+      // (com o dedo no meio da mão virava um dedo do meio)
       const hand = spawn(
-        `<svg viewBox="0 0 100 120" width="54" height="66" aria-hidden="true">
-           <g fill="#f3c08a" stroke="#8a5a34" stroke-width="4" stroke-linejoin="round">
-             <rect x="40" y="10" width="20" height="62" rx="10"/>
-             <rect x="28" y="62" width="58" height="20" rx="10"
-                   transform="rotate(0 28 62)"/>
-             <path d="M30 60 h34 a14 14 0 0 1 14 14 v20 a14 14 0 0 1 -14 14 h-34
-                      a14 14 0 0 1 -14 -14 v-20 a14 14 0 0 1 14 -14 z"/>
-           </g>
+        `<svg viewBox="0 0 110 120" width="96" height="105" aria-hidden="true">
+           <path d="M 16 18 A 12 12 0 0 1 40 18 L 40 58 L 82 58 A 12 12 0 0 1 82 82
+                    L 72 82 L 72 96 A 16 16 0 0 1 56 112 L 32 112 A 16 16 0 0 1 16 96 Z"
+                 fill="#f7c98f" stroke="#7d4f2a" stroke-width="5" stroke-linejoin="round"/>
+           <path d="M28 96 q10 -7 20 0" fill="none" stroke="#c98f5d"
+                 stroke-width="4" stroke-linecap="round"/>
+           <path d="M40 70 q9 -6 18 -1" fill="none" stroke="#c98f5d"
+                 stroke-width="3.5" stroke-linecap="round" opacity=".75"/>
          </svg>`,
         "fxHand fxHandL",
-        { left: `${c.x}px`, top: `${at.bottom + 8}px` },
+        { left: `${c.x}px`, top: `${at.top + at.height * 0.35}px` },
       );
 
+      // aparece do lado e se exibe, em vez de subir de baixo (subir era
+      // justamente o gesto do dedo do meio)
       run(
         hand,
         [
-          { transform: "translate(-50%,10%) scale(.5) rotate(-18deg)", opacity: 0 },
-          { transform: "translate(-50%,-70%) scale(1.15) rotate(0deg)", opacity: 1, offset: 0.35 },
-          { transform: "translate(-50%,-80%) scale(1.15) rotate(0deg)", opacity: 1, offset: 0.62 },
-          { transform: "translate(-50%,-95%) scale(1) rotate(6deg)", opacity: 0 },
+          { transform: "translate(-118%,-50%) scale(.4) rotate(-34deg)", opacity: 0 },
+          { transform: "translate(-118%,-50%) scale(1.22) rotate(6deg)", opacity: 1, offset: 0.22 },
+          { transform: "translate(-118%,-50%) scale(1.12) rotate(-7deg)", opacity: 1, offset: 0.42 },
+          { transform: "translate(-118%,-50%) scale(1.12) rotate(5deg)", opacity: 1, offset: 0.6 },
+          { transform: "translate(-118%,-50%) scale(1.12) rotate(0deg)", opacity: 1, offset: 0.82 },
+          { transform: "translate(-118%,-56%) scale(1) rotate(0deg)", opacity: 0 },
         ],
-        { duration: 1900 },
+        { duration: 2100, easing: "cubic-bezier(.3,.8,.35,1)" },
       );
 
+      // o 13 "carimba" depois que a mão já apareceu
       const num = spawn("13", "fxL13", {
         left: `${c.x}px`,
-        top: `${at.top - 6}px`,
+        top: `${at.top - 4}px`,
       });
 
       return run(
         num,
         [
-          { transform: "translate(-50%,40%) scale(.3) rotate(-14deg)", opacity: 0 },
-          { transform: "translate(-50%,-10%) scale(1.5) rotate(6deg)", opacity: 1, offset: 0.55 },
-          { transform: "translate(-50%,-25%) scale(1.25) rotate(0deg)", opacity: 1, offset: 0.8 },
-          { transform: "translate(-50%,-55%) scale(1.1)", opacity: 0 },
+          { transform: "translate(-50%,30%) scale(2.4) rotate(-12deg)", opacity: 0 },
+          { transform: "translate(-50%,-6%) scale(1.15) rotate(5deg)", opacity: 1, offset: 0.3 },
+          { transform: "translate(-50%,-14%) scale(1.35) rotate(-2deg)", opacity: 1, offset: 0.46 },
+          { transform: "translate(-50%,-18%) scale(1.25) rotate(0deg)", opacity: 1, offset: 0.78 },
+          { transform: "translate(-50%,-52%) scale(1.1)", opacity: 0 },
         ],
-        { duration: 2000, delay: 700 },
+        { duration: 1900, delay: 650, easing: "cubic-bezier(.2,1.3,.4,1)" },
       );
     },
 

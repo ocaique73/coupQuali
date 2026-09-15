@@ -233,7 +233,7 @@ const QUICK = [
   { kind: "sweat", icon: "😰", label: "Tenso..." },
   // "L" como letra: os emojis de mão em L são de 2022 e podem não existir
   { kind: "l13", icon: "L", label: "Faz o L" },
-  { kind: "finger", icon: "🖕", label: "Dedo" },
+  { kind: "finger", icon: "🖕", label: "FDP" },
 ];
 
 const PHASE_PT = {
@@ -655,17 +655,19 @@ const EMOTE_TEXT = {
   lie: "Mentira!",
   sweat: "Tenso...",
   bang: "",
-  finger: "",
+  finger: "filha da puta",
   l13: "",
 };
 
 function playEmote(ev) {
+  // a mensagem não depende de medir o card: vem primeiro, para nunca se
+  // perder caso o assento ainda não tenha layout
+  const txt = EMOTE_TEXT[ev.kind];
+  if (txt) showChatBubble(ev.playerId, txt);
+
   const s = seatEls.get(ev.playerId);
   const at = seatRect(ev.playerId);
   if (!at) return;
-
-  const txt = EMOTE_TEXT[ev.kind];
-  if (txt) showChatBubble(ev.playerId, txt);
 
   switch (ev.kind) {
     case "bang":
