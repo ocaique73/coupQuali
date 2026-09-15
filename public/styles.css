@@ -2001,3 +2001,384 @@ h2 {
 .seatTimer.on .tBar {
   visibility: visible;
 }
+
+/* =====================================================================
+   v3 — foto do jogador, moedas como peças (1 prata / 5 ouro), tamanhos,
+   pausa do host e destaque de quem ataca x quem recebe.
+   ===================================================================== */
+
+/* ---------- formulário de entrada ---------- */
+.fieldLabel {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 10px;
+  letter-spacing: 0.3px;
+}
+.fieldHint {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 4px 0 6px;
+  min-height: 14px;
+}
+.avatarRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.avatarRow input {
+  flex: 1;
+  margin: 8px 0 0;
+}
+.avatarPreview {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: #0b0f14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-top: 8px;
+}
+.avatarPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---------- assento maior ---------- */
+.seat {
+  width: 268px;
+}
+.seatCard {
+  padding: 12px 12px 12px 14px;
+}
+
+/* cartas 20% maiores e arte um pouco maior dentro delas */
+.miniCard {
+  width: 86px;
+  height: 115px;
+}
+.miniCard .cArt {
+  object-position: center 14%;
+  transform: scale(1.06);
+}
+.miniCard .label {
+  font-size: 10px;
+  padding: 4px 2px;
+}
+.miniHand {
+  gap: 10px;
+}
+
+/* ---------- foto do jogador: vazada no canto superior esquerdo ---------- */
+.seatAvatar {
+  position: absolute;
+  left: -18px;
+  top: -18px;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #0b0f14;
+  border: 3px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  transition:
+    border-color 0.25s ease,
+    transform 0.2s ease;
+}
+.seatAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.avaFallback {
+  font-size: 26px;
+  opacity: 0.8;
+}
+.seat.current .seatAvatar {
+  border-color: var(--yellow);
+  box-shadow: 0 0 22px rgba(255, 212, 0, 0.55);
+}
+.seat.me .seatAvatar {
+  border-color: rgba(43, 92, 255, 0.85);
+}
+.seat.eliminated .seatAvatar {
+  filter: grayscale(1);
+}
+/* a foto ocupa o canto: o nome começa depois dela */
+.seatTop {
+  padding-left: 46px;
+  min-height: 34px;
+}
+
+/* ---------- moedas como peças ---------- */
+.moneyTag {
+  gap: 7px;
+  padding: 3px 9px 3px 6px;
+}
+.coinStack {
+  display: inline-flex;
+  align-items: center;
+}
+.coinPc {
+  display: block;
+  width: 19px;
+  height: 19px;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+}
+.coinPc + .coinPc {
+  margin-left: -7px;
+}
+.coinPc.c1 {
+  background-image: url("/img/coin1.png");
+}
+.coinPc.c5 {
+  background-image: url("/img/coin5.png");
+}
+.coinPc.coinDrop {
+  animation: coinDrop 0.42s cubic-bezier(0.22, 0.9, 0.28, 1);
+}
+@keyframes coinDrop {
+  0% {
+    transform: translateY(-16px) scale(0.5) rotate(-40deg);
+    opacity: 0;
+  }
+  70% {
+    transform: translateY(2px) scale(1.18) rotate(6deg);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* moeda que voa nas animações usa a mesma arte */
+.fxCoin {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: url("/img/coin1.png") center / cover no-repeat;
+  border-radius: 0;
+  box-shadow: none;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.6));
+}
+
+/* ---------- banco do centro: metade do tamanho ---------- */
+.bankPile {
+  width: 34px;
+  height: 46px;
+}
+.bankCoin {
+  width: 23px;
+  height: 23px;
+  margin-left: -11.5px;
+  border: none;
+  background: url("/img/coin1.png") center / cover no-repeat;
+  box-shadow: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
+}
+.bankCoin.b1 {
+  bottom: 0;
+}
+.bankCoin.b2 {
+  bottom: 4px;
+  margin-left: -13px;
+}
+.bankCoin.b3 {
+  bottom: 8px;
+  margin-left: -10px;
+  background-image: url("/img/coin5.png");
+}
+.bankCoin.b4 {
+  bottom: 12px;
+  margin-left: -12.5px;
+}
+.bankCoin.b5 {
+  bottom: 16px;
+  margin-left: -11px;
+  background-image: url("/img/coin5.png");
+}
+.micon {
+  width: 15px;
+  height: 15px;
+  border: none;
+  background: url("/img/coin1.png") center / cover no-repeat;
+}
+
+/* ---------- quem ataca x quem recebe ---------- */
+.roleTag {
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.roleTag.actor {
+  color: var(--blue);
+  background: rgba(58, 166, 255, 0.14);
+}
+.roleTag.target {
+  color: var(--red);
+  background: rgba(255, 59, 59, 0.16);
+}
+.roleTag.blocker {
+  color: var(--yellow);
+  background: rgba(255, 212, 0, 0.14);
+}
+.playerName {
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.seat.isActor .seatCard {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(58, 166, 255, 0.3);
+}
+.seat.isActor .nick {
+  color: #a9d8ff;
+}
+.seat.isTarget .seatCard {
+  border-color: var(--red);
+  box-shadow: 0 0 0 2px rgba(255, 59, 59, 0.35);
+  animation: targetThrob 1.5s ease-in-out infinite;
+}
+.seat.isTarget .nick {
+  color: #ffb3b3;
+}
+.seat.isBlocker .seatCard {
+  border-color: var(--yellow);
+  box-shadow: 0 0 0 2px rgba(255, 212, 0, 0.3);
+}
+@keyframes targetThrob {
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(255, 59, 59, 0.35),
+      0 0 30px rgba(255, 59, 59, 0.4);
+  }
+}
+
+/* nomes destacados no texto do modal */
+.nmActor {
+  color: #a9d8ff;
+  font-weight: 900;
+}
+.nmTarget {
+  color: #ffb3b3;
+  font-weight: 900;
+}
+
+/* ---------- desconectado ---------- */
+.seat.offline .seatCard {
+  border-style: dashed;
+}
+.seat.offline .seatAvatar::after {
+  content: "🔌";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  font-size: 22px;
+}
+
+/* ---------- pausa ---------- */
+.pauseOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 8, 14, 0.9);
+  backdrop-filter: blur(6px);
+  animation: fadeIn 0.3s ease;
+}
+.pauseCard {
+  text-align: center;
+  padding: 36px 52px;
+  border-radius: 22px;
+  background: rgba(10, 16, 24, 0.92);
+  border: 2px solid var(--yellow);
+  box-shadow: 0 0 70px rgba(255, 212, 0, 0.25);
+  animation: popIn 0.4s cubic-bezier(0.22, 0.9, 0.28, 1);
+}
+.pauseIcon {
+  font-size: 58px;
+  line-height: 1;
+  animation: trophyBounce 2.2s ease-in-out infinite;
+}
+.pauseTitle {
+  margin-top: 10px;
+  font-size: 13px;
+  letter-spacing: 6px;
+  font-weight: 900;
+  color: var(--yellow);
+}
+.pauseBy {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+.pauseClock {
+  font-size: 54px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  margin: 6px 0 2px;
+}
+.pauseSub {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 20px;
+}
+.pauseOverlay.urgent .pauseClock {
+  color: var(--red);
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@media (max-width: 1200px) {
+  .seat {
+    width: 210px;
+  }
+  .miniCard {
+    width: 68px;
+    height: 92px;
+  }
+  .seatAvatar {
+    width: 50px;
+    height: 50px;
+    left: -14px;
+    top: -14px;
+  }
+  .seatTop {
+    padding-left: 38px;
+  }
+}
+
+/* jogador que caiu, na lista da esquerda */
+.readyDot.off {
+  background: var(--muted);
+  box-shadow: none;
+  animation: blink 1.4s steps(2, start) infinite;
+}
+.lobbyItem.offlineRow {
+  opacity: 0.72;
+  border-style: dashed;
+}
+.lobbyItem.offlineRow .readyTag {
+  color: var(--yellow);
+}

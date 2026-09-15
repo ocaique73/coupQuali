@@ -111,13 +111,16 @@ window.UI = {
     );
   },
 
-  // posições em círculo (2..6 perfeito)
-  seatPositions(n) {
+  // posições em círculo (2..6 perfeito).
+  // rx/ry vêm do renderTable já ajustados ao tamanho real da mesa, para que
+  // os assentos (que são largos e ainda têm a foto vazando para fora) nunca
+  // fiquem cortados na borda.
+  seatPositions(n, rx, ry) {
     const positions = [];
     const centerX = 50;
     const centerY = 52;
-    const radiusX = 38;
-    const radiusY = 33;
+    const radiusX = rx ?? 38;
+    const radiusY = ry ?? 33;
 
     for (let i = 0; i < n; i++) {
       const angle = (-90 + (360 / n) * i) * (Math.PI / 180);

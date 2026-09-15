@@ -17,6 +17,17 @@ const TURN_MS = 90_000;
 const RESPONSE_MS = 90_000;
 const CHOICE_MS = 90_000;
 
+// turno encurtado quando o jogador da vez está desconectado, para a partida
+// não travar 90s por rodada esperando alguém que caiu
+const TURN_MS_OFFLINE = 20_000;
+
+// pausa do host
+const PAUSE_MAX_MS = 3 * 60_000;
+
+// a sala só é destruída depois desse tempo sem ninguém conectado —
+// é o que permite todo mundo recarregar ao mesmo tempo sem perder a partida
+const ROOM_GRACE_MS = 10 * 60_000;
+
 const ROLES = ["Duke", "Assassin", "Captain", "Ambassador", "Contessa"];
 
 function now() {
@@ -37,6 +48,28 @@ function makeDeck() {
 }
 function draw(deck) {
   return deck.pop();
+}
+
+// identidade estável do jogador: vem do navegador (sessionStorage) e sobrevive
+// a reload e a queda de conexão. socket.id muda a cada conexão; o pid não.
+function cleanPid(pid) {
+  const s = ("" + (pid ?? "")).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+  return s.length >= 8 ? s : null;
+}
+function randomPid() {
+  return (
+    "p" +
+    Math.random().toString(36).slice(2, 12) +
+    Math.random().toString(36).slice(2, 8)
+  );
+}
+
+// só aceita URL de imagem http(s) — evita javascript:/data: vindo do campo
+function safeAvatarUrl(url) {
+  const s = ("" + (url ?? "")).trim().slice(0, 500);
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) return null;
+  return s;
 }
 
 function roomKeyFromPath(p) {
@@ -84,6 +117,9 @@ function getRoom(key) {
       events: [],
       eventSeq: 0,
       winner: null,
+
+      paused: null, // { at, byNick, untilAt }
+      emptySince: 0,
     });
   }
   return rooms.get(key);
@@ -113,8 +149,9 @@ function connectedPlayers(room) {
 // cadeiras; quem chegou com a sala cheia (ou com a partida em andamento) fica
 // na fila ate o host puxar.
 const MAX_SEATS = 6;
+// quem caiu no meio da partida NÃO perde a cadeira — pode voltar
 function seatedPlayers(room) {
-  return room.players.filter((p) => p.connected && p.seated);
+  return room.players.filter((p) => p.seated && (p.connected || p.inGame));
 }
 function queuedPlayers(room) {
   return room.players.filter((p) => p.connected && !p.seated);
@@ -122,8 +159,11 @@ function queuedPlayers(room) {
 function lobbyPlayers(room) {
   return room.players.filter((p) => p.connected && p.seated && !p.inGame);
 }
+// NÃO filtra por connected: quem caiu continua na partida e pode voltar.
+// Se filtrasse, os índices de turno mudariam no meio do jogo e a vez pularia
+// para a pessoa errada.
 function inGamePlayers(room) {
-  return room.players.filter((p) => p.connected && p.inGame);
+  return room.players.filter((p) => p.inGame);
 }
 
 function isAlive(p) {
@@ -140,8 +180,10 @@ function electHost(room) {
   room.hostId = pool.length ? pool[0].id : null;
 }
 
+// não destrói na hora: marca o momento em que esvaziou. O tick apaga só depois
+// de ROOM_GRACE_MS, para que todo mundo possa recarregar sem perder a partida.
 function removeRoomIfEmpty(room) {
-  if (!room.players.some((p) => p.connected)) rooms.delete(room.key);
+  room.emptySince = room.players.some((p) => p.connected) ? 0 : now();
 }
 
 function actionRequiresClaim(type) {
@@ -223,8 +265,10 @@ function roomPublicState(room, viewerId) {
   const roomPlayers = seatedPlayers(room).map((p) => ({
     id: p.id,
     nick: p.nick,
+    avatar: p.avatar || null,
     ready: !!p.ready,
     inGame: !!p.inGame,
+    connected: !!p.connected,
     isHost: p.id === room.hostId,
   }));
 
@@ -232,6 +276,7 @@ function roomPublicState(room, viewerId) {
   const queue = queuedPlayers(room).map((p) => ({
     id: p.id,
     nick: p.nick,
+    avatar: p.avatar || null,
     isHost: p.id === room.hostId,
   }));
 
@@ -256,6 +301,7 @@ function roomPublicState(room, viewerId) {
     playersInGame: ig.map((p) => ({
       id: p.id,
       nick: p.nick,
+      avatar: p.avatar || null,
       coins: p.coins,
       connected: p.connected,
       aliveCount: aliveCount(p),
@@ -301,12 +347,55 @@ function roomPublicState(room, viewerId) {
     deckCount: room.deck.length,
     winner: room.winner,
     events: room.events.slice(-40),
+
+    paused: room.paused
+      ? { byNick: room.paused.byNick, untilAt: room.paused.untilAt }
+      : null,
   };
 }
 
 function broadcast(room) {
-  for (const p of room.players)
-    io.to(p.id).emit("state", roomPublicState(room, p.id));
+  // p.id é o pid estável; quem recebe o socket é p.socketId
+  for (const p of room.players) {
+    if (!p.connected || !p.socketId) continue;
+    io.to(p.socketId).emit("state", roomPublicState(room, p.id));
+  }
+}
+
+/* ---------------- pausa (só host, no máximo 3 min) ---------------- */
+
+function isPaused(room) {
+  return !!room.paused;
+}
+
+function pauseGame(room, byNick) {
+  if (!room.started || room.paused) return false;
+  room.paused = { at: now(), byNick, untilAt: now() + PAUSE_MAX_MS };
+  pushEvent(room, "paused", { byNick, untilAt: room.paused.untilAt });
+  addLog(room, `⏸ ${byNick} pausou a partida.`);
+  return true;
+}
+
+// empurra todos os prazos para frente pelo tempo que ficou pausado,
+// senão a pausa consumiria o turno de quem estava jogando
+function resumeGame(room, auto) {
+  if (!room.paused) return false;
+  const delta = now() - room.paused.at;
+
+  if (room.turnEndsAt) room.turnEndsAt += delta;
+  if (room.reactionEndsAt) room.reactionEndsAt += delta;
+  if (room.blockChallengeEndsAt) room.blockChallengeEndsAt += delta;
+  if (room.lossEndsAt) room.lossEndsAt += delta;
+  if (room.exchange?.endsAt) room.exchange.endsAt += delta;
+
+  const byNick = room.paused.byNick;
+  room.paused = null;
+  pushEvent(room, "resumed", { byNick, auto: !!auto });
+  addLog(
+    room,
+    auto ? `▶ Pausa esgotou (3 min). Partida retomada.` : `▶ Partida retomada.`,
+  );
+  return true;
 }
 
 function endToLobby(room, reason) {
@@ -394,7 +483,7 @@ function nextAliveIndex(room, startIdx) {
   for (let step = 1; step <= n; step++) {
     const idx = (startIdx + step) % n;
     const p = ig[idx];
-    if (p && p.connected && isAlive(p)) return idx;
+    if (p && isAlive(p)) return idx;
   }
   return startIdx;
 }
@@ -556,7 +645,7 @@ function applyImmediateAction(room, actor, action) {
       return { ok: true };
 
     case "steal": {
-      if (!target || !target.connected || !isAlive(target))
+      if (!target || !isAlive(target))
         return { ok: false };
       const amt = Math.min(2, target.coins);
       target.coins -= amt;
@@ -571,7 +660,7 @@ function applyImmediateAction(room, actor, action) {
     }
 
     case "assassinate": {
-      if (!target || !target.connected || !isAlive(target))
+      if (!target || !isAlive(target))
         return { ok: false };
       requestLoseInfluence(
         room,
@@ -611,7 +700,7 @@ function applyImmediateAction(room, actor, action) {
     }
 
     case "coup": {
-      if (!target || !target.connected || !isAlive(target))
+      if (!target || !isAlive(target))
         return { ok: false };
       if (actor.coins < 7) return { ok: false };
       actor.coins -= 7;
@@ -815,13 +904,38 @@ function applyExchangeSelection(room, actor, keepRoles) {
 
 setInterval(() => {
   for (const room of rooms.values()) {
+    // sala vazia expira só depois do período de graça (permite reload geral)
+    if (room.emptySince && now() - room.emptySince >= ROOM_GRACE_MS) {
+      rooms.delete(room.key);
+      continue;
+    }
+
     if (!room.started) continue;
+
+    // pausado: nada de prazo corre. Só o teto de 3 min é verificado.
+    if (room.paused) {
+      if (now() >= room.paused.untilAt) {
+        resumeGame(room, true);
+        broadcast(room);
+      }
+      continue;
+    }
 
     const ig = inGamePlayers(room);
     const current = ig[room.turnIndex];
 
+    // quem está offline não segura o turno por 90s
+    if (
+      room.phase === "turn" &&
+      current &&
+      !current.connected &&
+      room.turnEndsAt - now() > TURN_MS_OFFLINE
+    ) {
+      room.turnEndsAt = now() + TURN_MS_OFFLINE;
+    }
+
     if (room.phase === "turn" && now() >= room.turnEndsAt) {
-      if (current && current.connected && isAlive(current)) {
+      if (current && isAlive(current)) {
         addLog(room, `${current.nick} não jogou: padrão -> RENDA (+1).`);
         current.coins += 1;
         pushEvent(room, "coins", {
@@ -893,24 +1007,33 @@ setInterval(() => {
 
 io.on("connection", (socket) => {
   let joinedRoomKey = null;
+  let myPid = null; // identidade estável desta aba (não muda ao reconectar)
 
-  socket.on("join", ({ roomKey, nick }) => {
+  socket.on("join", ({ roomKey, nick, pid, avatar }) => {
     const key = roomKeyFromPath(roomKey);
     const room = getRoom(key);
     joinedRoomKey = key;
 
     const cleanNick = (nick ?? "").toString().trim().slice(0, 20) || "Jogador";
+    const cleanAvatar = safeAvatarUrl(avatar);
 
-    let p = findPlayer(room, socket.id);
+    myPid = cleanPid(pid) || randomPid();
+
+    // reconexão: se já existe alguém com esse pid, ele volta para o MESMO
+    // lugar (cadeira, mão, moedas, vez) em vez de virar um jogador novo
+    let p = findPlayer(room, myPid);
+    const reconnecting = !!p;
+
     if (!p) {
       // senta se houver cadeira livre E a partida nao tiver comecado;
       // caso contrario vai para a fila e espera o host puxar
-      const canSit =
-        !room.started && seatedPlayers(room).length < MAX_SEATS;
+      const canSit = !room.started && seatedPlayers(room).length < MAX_SEATS;
 
       p = {
-        id: socket.id,
+        id: myPid,
+        socketId: socket.id,
         nick: cleanNick,
+        avatar: cleanAvatar,
         connected: true,
         seated: canSit,
         ready: false,
@@ -926,21 +1049,29 @@ io.on("connection", (socket) => {
           : `${cleanNick} entrou na FILA (${room.started ? "partida em andamento" : "sala cheia"}).`,
       );
     } else {
+      p.socketId = socket.id;
       p.nick = cleanNick;
+      p.avatar = cleanAvatar;
+      const wasOffline = !p.connected;
       p.connected = true;
-      addLog(room, `${cleanNick} voltou.`);
+      if (wasOffline) {
+        addLog(room, `🔌 ${cleanNick} reconectou.`);
+        pushEvent(room, "reconnected", { playerId: p.id, nick: cleanNick });
+      }
     }
 
-    if (!room.hostId) room.hostId = socket.id;
+    if (!room.hostId) room.hostId = p.id;
+    room.emptySince = 0;
 
     socket.join(key);
+    socket.emit("me", { pid: myPid, reconnected: reconnecting });
     broadcast(room);
   });
 
   socket.on("toggle_ready", () => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    const p = findPlayer(room, socket.id);
+    const p = findPlayer(room, myPid);
     if (!p || !p.connected) return;
 
     // não mexe ready durante jogo, e quem está na fila não fica READY
@@ -955,7 +1086,7 @@ io.on("connection", (socket) => {
   socket.on("start", () => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    if (socket.id !== room.hostId) return;
+    if (myPid !== room.hostId) return;
     if (room.started) return;
 
     const res = startGame(room);
@@ -967,7 +1098,7 @@ io.on("connection", (socket) => {
   socket.on("promote", ({ playerId }) => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    if (socket.id !== room.hostId) return;
+    if (myPid !== room.hostId) return;
     if (room.started) return;
     if (seatedPlayers(room).length >= MAX_SEATS) return;
 
@@ -984,7 +1115,7 @@ io.on("connection", (socket) => {
   socket.on("demote", ({ playerId }) => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    if (socket.id !== room.hostId) return;
+    if (myPid !== room.hostId) return;
     if (room.started) return;
 
     const p = findPlayer(room, playerId);
@@ -996,10 +1127,26 @@ io.on("connection", (socket) => {
     broadcast(room);
   });
 
+  socket.on("pause", () => {
+    if (!joinedRoomKey) return;
+    const room = getRoom(joinedRoomKey);
+    if (myPid !== room.hostId) return;
+    const p = findPlayer(room, myPid);
+    if (!p) return;
+    if (pauseGame(room, p.nick)) broadcast(room);
+  });
+
+  socket.on("resume", () => {
+    if (!joinedRoomKey) return;
+    const room = getRoom(joinedRoomKey);
+    if (myPid !== room.hostId) return;
+    if (resumeGame(room, false)) broadcast(room);
+  });
+
   socket.on("restart", () => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    if (socket.id !== room.hostId) return;
+    if (myPid !== room.hostId) return;
     if (!room.started) return;
 
     endToLobby(room, `Host reiniciou a sala.`);
@@ -1009,11 +1156,11 @@ io.on("connection", (socket) => {
   socket.on("action", ({ type, targetId }) => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    if (!room.started || room.phase !== "turn") return;
+    if (!room.started || isPaused(room) || room.phase !== "turn") return;
 
     const ig = inGamePlayers(room);
     const actor = ig[room.turnIndex];
-    if (!actor || actor.id !== socket.id || !isAlive(actor)) return;
+    if (!actor || actor.id !== myPid || !isAlive(actor)) return;
 
     const action = { type, targetId: targetId ?? null };
     const claimRole = actionRequiresClaim(type)
@@ -1068,18 +1215,18 @@ io.on("connection", (socket) => {
   socket.on("react", ({ decision }) => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    if (!room.started || room.phase !== "reaction") return;
+    if (!room.started || isPaused(room) || room.phase !== "reaction") return;
 
     const pa = room.pendingAction;
-    if (!pa || socket.id === pa.actorId) return;
+    if (!pa || myPid === pa.actorId) return;
 
-    const p = findPlayer(room, socket.id);
+    const p = findPlayer(room, myPid);
     if (!p || !p.inGame || !isAlive(p)) return;
 
     if (!["accept", "contest"].includes(decision)) return;
 
-    if (room.reactions[socket.id] == null) {
-      room.reactions[socket.id] = decision;
+    if (room.reactions[myPid] == null) {
+      room.reactions[myPid] = decision;
       addLog(
         room,
         `${p.nick}: ${decision === "accept" ? "ACEITA" : "CONTESTA"}.`,
@@ -1096,19 +1243,19 @@ io.on("connection", (socket) => {
   socket.on("block", ({ role }) => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    if (!room.started || room.phase !== "reaction") return;
+    if (!room.started || isPaused(room) || room.phase !== "reaction") return;
 
     const pa = room.pendingAction;
-    if (!pa || socket.id === pa.actorId) return;
+    if (!pa || myPid === pa.actorId) return;
 
-    const p = findPlayer(room, socket.id);
+    const p = findPlayer(room, myPid);
     if (!p || !p.inGame || !isAlive(p)) return;
 
     const info = actionBlockInfo(pa.action.type);
     if (!info.blockable || room.block) return;
 
     if (info.blockers === "target") {
-      if (!pa.action.targetId || socket.id !== pa.action.targetId) return;
+      if (!pa.action.targetId || myPid !== pa.action.targetId) return;
     }
 
     const picked = (role || "").toString();
@@ -1133,17 +1280,17 @@ io.on("connection", (socket) => {
   socket.on("block_challenge", ({ decision }) => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    if (!room.started || room.phase !== "block_challenge") return;
+    if (!room.started || isPaused(room) || room.phase !== "block_challenge") return;
 
-    if (!room.block || socket.id === room.block.blockerId) return;
+    if (!room.block || myPid === room.block.blockerId) return;
 
-    const p = findPlayer(room, socket.id);
+    const p = findPlayer(room, myPid);
     if (!p || !p.inGame || !isAlive(p)) return;
 
     if (!["accept", "contest"].includes(decision)) return;
 
-    if (room.blockChallenges[socket.id] == null) {
-      room.blockChallenges[socket.id] = decision;
+    if (room.blockChallenges[myPid] == null) {
+      room.blockChallenges[myPid] = decision;
       addLog(
         room,
         `${p.nick}: ${decision === "accept" ? "ACEITA" : "CONTESTA"} o bloqueio.`,
@@ -1160,12 +1307,12 @@ io.on("connection", (socket) => {
   socket.on("lose_influence", ({ cardIdx }) => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    if (!room.started || room.phase !== "await_loss") return;
+    if (!room.started || isPaused(room) || room.phase !== "await_loss") return;
 
     const loss = room.loss;
-    if (!loss || loss.playerId !== socket.id) return;
+    if (!loss || loss.playerId !== myPid) return;
 
-    const p = findPlayer(room, socket.id);
+    const p = findPlayer(room, myPid);
     if (!p) return;
 
     const idx = Number(cardIdx);
@@ -1184,11 +1331,11 @@ io.on("connection", (socket) => {
   socket.on("exchange_pick", ({ keep }) => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    if (!room.started || room.phase !== "exchange_select") return;
+    if (!room.started || isPaused(room) || room.phase !== "exchange_select") return;
 
-    if (!room.exchange || room.exchange.actorId !== socket.id) return;
+    if (!room.exchange || room.exchange.actorId !== myPid) return;
 
-    const actor = findPlayer(room, socket.id);
+    const actor = findPlayer(room, myPid);
     if (!actor) return;
 
     const keepArr = Array.isArray(keep) ? keep.map(String) : [];
@@ -1216,13 +1363,21 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     if (!joinedRoomKey) return;
     const room = getRoom(joinedRoomKey);
-    const p = findPlayer(room, socket.id);
+    const p = findPlayer(room, myPid);
     if (!p) return;
 
     p.connected = false;
-    addLog(room, `${p.nick} saiu.`);
+    p.socketId = null;
 
-    if (room.hostId === socket.id) {
+    if (p.inGame) {
+      // não perde a vez, a mão nem a cadeira — pode voltar
+      addLog(room, `🔌 ${p.nick} caiu (pode reconectar).`);
+      pushEvent(room, "disconnected", { playerId: p.id, nick: p.nick });
+    } else {
+      addLog(room, `${p.nick} saiu.`);
+    }
+
+    if (room.hostId === myPid) {
       electHost(room);
       if (room.hostId)
         addLog(

@@ -11,10 +11,20 @@ const els = {
   nickInput: document.getElementById("nickInput"),
   joinBtn: document.getElementById("joinBtn"),
 
+  avatarInput: document.getElementById("avatarInput"),
+  avatarPreview: document.getElementById("avatarPreview"),
+  avatarHint: document.getElementById("avatarHint"),
+
   hostControls: document.getElementById("hostControls"),
   startBtn: document.getElementById("startBtn"),
+  pauseBtn: document.getElementById("pauseBtn"),
   restartBtn: document.getElementById("restartBtn"),
   readyBtn: document.getElementById("readyBtn"),
+
+  pauseOverlay: document.getElementById("pauseOverlay"),
+  pauseBy: document.getElementById("pauseBy"),
+  pauseClock: document.getElementById("pauseClock"),
+  resumeBtn: document.getElementById("resumeBtn"),
 
   roomPeople: document.getElementById("roomPeople"),
   seatCount: document.getElementById("seatCount"),
@@ -73,9 +83,46 @@ const els = {
 
 const TURN_MS = 90_000;
 
-let myId = null;
+/* ------------------------------------------------------------------ */
+/* identidade persistente                                               */
+/*                                                                      */
+/* O pid fica no sessionStorage (por ABA), não no localStorage:         */
+/*  - sobrevive a F5 e a queda de conexão -> você volta para o mesmo    */
+/*    lugar, com a mesma mão, moedas e vez;                             */
+/*  - duas abas na mesma máquina continuam sendo DOIS jogadores, o que  */
+/*    localStorage quebraria (as duas virariam a mesma pessoa).         */
+/* Nick e foto ficam no localStorage só para pré-preencher o formulário.*/
+/* ------------------------------------------------------------------ */
+
+function store(area, key, val) {
+  try {
+    if (val === undefined) return area.getItem(key);
+    area.setItem(key, val);
+    return val;
+  } catch {
+    return null;
+  }
+}
+
+function getMyPid() {
+  let pid = store(sessionStorage, "coup.pid");
+  if (!pid) {
+    pid =
+      "p" +
+      Math.random().toString(36).slice(2, 12) +
+      Math.random().toString(36).slice(2, 8);
+    store(sessionStorage, "coup.pid", pid);
+  }
+  return pid;
+}
+
+const MY_PID = getMyPid();
+
+let myId = MY_PID;
 let state = null;
 let joined = false;
+let myNick = store(localStorage, "coup.nick") || "";
+let myAvatar = store(localStorage, "coup.avatar") || "";
 
 let hideMyCards = false;
 let targeting = null; // ação escolhida esperando alvo
@@ -180,7 +227,14 @@ const PHASE_PT = {
 };
 
 socket.on("connect", () => {
-  myId = socket.id;
+  myId = MY_PID;
+  // reentra sozinho após F5 / queda: o servidor reconhece o pid e devolve
+  // o mesmo lugar na partida
+  if (myNick) doJoin();
+});
+
+socket.on("me", ({ pid }) => {
+  if (pid) myId = pid;
 });
 
 socket.on("state", (s) => {
@@ -506,6 +560,39 @@ function scheduleEvent(ev) {
         });
       }, 600);
       break;
+
+    case "paused":
+      FX.clearQueue();
+      FX.banner({ title: `⏸ ${ev.byNick} pausou`, cls: "warn", dur: 1400 });
+      break;
+
+    case "resumed":
+      FX.banner({
+        title: "▶ Partida retomada",
+        sub: ev.auto ? "a pausa esgotou" : "",
+        cls: "good",
+        dur: 1300,
+      });
+      break;
+
+    case "disconnected":
+      FX.enqueue(() => {
+        FX.banner({
+          title: `🔌 ${ev.nick} caiu`,
+          sub: "pode voltar sem perder o lugar",
+          cls: "warn",
+          dur: 1500,
+        });
+        FX.ping(seatEls.get(ev.playerId)?.root, "blockPulse", 900);
+      }, 700);
+      break;
+
+    case "reconnected":
+      FX.enqueue(() => {
+        FX.banner({ title: `🔌 ${ev.nick} voltou`, cls: "good", dur: 1300 });
+        FX.ping(seatEls.get(ev.playerId)?.root, "turnPulse", 900);
+      }, 700);
+      break;
   }
 }
 
@@ -513,15 +600,61 @@ function scheduleEvent(ev) {
 /* inputs                                                               */
 /* ------------------------------------------------------------------ */
 
+function doJoin() {
+  socket.emit("join", {
+    roomKey,
+    nick: myNick,
+    pid: MY_PID,
+    avatar: myAvatar || null,
+  });
+  joined = true;
+}
+
 els.joinBtn.onclick = () => {
   const nick = (els.nickInput.value || "").trim().slice(0, 20);
   if (!nick) return alert("Digite um nick.");
-  socket.emit("join", { roomKey, nick });
-  joined = true;
+
+  const avatar = (els.avatarInput.value || "").trim();
+  if (avatar && !/^https?:\/\//i.test(avatar))
+    return alert("O link da foto precisa começar com http:// ou https://");
+
+  myNick = nick;
+  myAvatar = avatar;
+  store(localStorage, "coup.nick", myNick);
+  store(localStorage, "coup.avatar", myAvatar);
+
+  doJoin();
 };
+
 els.nickInput.onkeydown = (e) => {
   if (e.key === "Enter") els.joinBtn.click();
 };
+els.avatarInput.onkeydown = (e) => {
+  if (e.key === "Enter") els.joinBtn.click();
+};
+
+// prévia da foto enquanto digita
+function refreshAvatarPreview() {
+  const url = (els.avatarInput.value || "").trim();
+  const ok = /^https?:\/\//i.test(url);
+  els.avatarPreview.innerHTML = ok
+    ? `<img src="${UI.escape(url)}" alt="" onerror="this.parentElement.innerHTML='<span>❌</span>'" />`
+    : `<span>👤</span>`;
+  els.avatarHint.textContent = url
+    ? ok
+      ? "Se a imagem não aparecer aqui, o link não serve."
+      : "Precisa começar com http:// ou https://"
+    : "Opcional. Aparece no seu card na mesa.";
+}
+els.avatarInput.oninput = refreshAvatarPreview;
+
+// pré-preenche com o que já foi usado antes
+els.nickInput.value = myNick;
+els.avatarInput.value = myAvatar;
+refreshAvatarPreview();
+
+els.pauseBtn.onclick = () => socket.emit("pause");
+els.resumeBtn.onclick = () => socket.emit("resume");
 
 els.readyBtn.onclick = () => socket.emit("toggle_ready");
 els.startBtn.onclick = () => socket.emit("start");
@@ -704,6 +837,12 @@ function renderHostButtons() {
   const canStart =
     !state.started && seated.length >= 2 && seated.length <= max && allReady;
 
+  els.pauseBtn.style.display = state.started ? "inline-flex" : "none";
+  els.pauseBtn.disabled = !state.started || !!state.paused;
+  els.pauseBtn.title = state.paused
+    ? "Já está pausado"
+    : "Pausar a partida (máx. 3 min)";
+
   els.startBtn.disabled = !canStart;
   els.startBtn.title = canStart
     ? "Começar a partida"
@@ -729,14 +868,23 @@ function renderRoomPeople() {
   }
 
   for (const p of people) {
+    const off = p.connected === false;
     const row = document.createElement("div");
-    row.className = "lobbyItem";
+    row.className = `lobbyItem ${off ? "offlineRow" : ""}`;
     row.innerHTML = `
       <div class="lobbyWho">
-        <span class="readyDot ${p.ready ? "on" : ""}"></span>
+        <span class="readyDot ${off ? "off" : p.ready ? "on" : ""}"></span>
         <b>${UI.escape(p.nick)}${p.isHost ? " 👑" : ""}</b>
       </div>
-      <span class="readyTag">${p.inGame ? "EM JOGO" : p.ready ? "READY" : "NOT READY"}</span>
+      <span class="readyTag">${
+        off
+          ? "CAIU — pode voltar"
+          : p.inGame
+            ? "EM JOGO"
+            : p.ready
+              ? "READY"
+              : "NOT READY"
+      }</span>
     `;
 
     // host pode devolver alguém para a fila enquanto não começou
@@ -1007,9 +1155,13 @@ function renderReactionBoxes() {
       ? nickOf(pending.action.targetId)
       : null;
 
-    els.pendingText.textContent =
-      `${pending.actorNick} declarou ${UI.actionLabel(pending.action.type)}${claim}` +
-      (targetNick ? ` em ${targetNick}` : "");
+    // nomes destacados: quem está agindo e quem vai receber
+    els.pendingText.innerHTML =
+      `<span class="nmActor">${UI.escape(pending.actorNick)}</span> declarou ` +
+      `${UI.escape(UI.actionLabel(pending.action.type))}${UI.escape(claim)}` +
+      (targetNick
+        ? ` contra <span class="nmTarget">${UI.escape(targetNick)}</span>`
+        : "");
 
     els.reactionHint.textContent = blockHint(pending);
 
@@ -1079,13 +1231,20 @@ function buildSeat(pid) {
   root.innerHTML = `
     <div class="seatCard">
       <div class="seatRing"></div>
+
+      <div class="seatAvatar"><span class="avaFallback">👤</span></div>
+
       <div class="seatTop">
         <div class="playerName">
-          <span class="personIcon">👤</span>
           <span class="nick"></span>
+          <span class="roleTag hidden"></span>
         </div>
-        <div class="moneyTag"><i class="micon"></i><span class="coins">0</span></div>
+        <div class="moneyTag">
+          <span class="coinStack"></span>
+          <span class="coins">0</span>
+        </div>
       </div>
+
       <div class="miniHand">
         <div class="miniCard back" data-idx="0"><div class="cMark">C</div></div>
         <div class="miniCard back" data-idx="1"><div class="cMark">C</div></div>
@@ -1104,8 +1263,11 @@ function buildSeat(pid) {
   const refs = {
     root,
     card: root.querySelector(".seatCard"),
+    avatar: root.querySelector(".seatAvatar"),
     nick: root.querySelector(".nick"),
+    roleTag: root.querySelector(".roleTag"),
     coins: root.querySelector(".coins"),
+    stack: root.querySelector(".coinStack"),
     money: root.querySelector(".moneyTag"),
     badge: root.querySelector(".seatBadge"),
     timerWrap: root.querySelector(".seatTimer"),
@@ -1135,6 +1297,52 @@ function updateMiniCard(el, card, showRole) {
   el.innerHTML = roleToShow
     ? `${UI.roleArt(roleToShow)}<div class="label">${UI.escape(UI.rolePt(roleToShow))}</div>`
     : `<div class="cMark">C</div>`;
+}
+
+// moedas viram peças de verdade: 1 dourada vale 5, 1 prateada vale 1.
+// 7 moedas = 1 dourada + 2 prateadas.
+function coinStackHTML(coins) {
+  const n = Math.max(0, coins | 0);
+  const gold = Math.floor(n / 5);
+  const silver = n % 5;
+  let h = "";
+  let i = 0;
+  for (let g = 0; g < gold; g++) h += `<i class="coinPc c5" style="--i:${i++}"></i>`;
+  for (let s = 0; s < silver; s++) h += `<i class="coinPc c1" style="--i:${i++}"></i>`;
+  return h;
+}
+
+function updateCoinStack(refs, coins) {
+  const sig = String(coins);
+  if (refs.stack.dataset.sig === sig) return;
+  const grew = refs.stack.dataset.sig !== undefined && coins > +refs.stack.dataset.sig;
+  refs.stack.dataset.sig = sig;
+  refs.stack.innerHTML = coinStackHTML(coins);
+  if (grew) {
+    const last = refs.stack.lastElementChild;
+    if (last) FX.ping(last, "coinDrop", 420);
+  }
+}
+
+function updateAvatar(refs, p) {
+  const url = p.avatar || "";
+  if (refs.avatar.dataset.src === url) return;
+  refs.avatar.dataset.src = url;
+  refs.avatar.innerHTML = url
+    ? `<img src="${UI.escape(url)}" alt="" draggable="false"
+         onerror="this.parentElement.innerHTML='<span class=\\'avaFallback\\'>👤</span>'" />`
+    : `<span class="avaFallback">👤</span>`;
+}
+
+// quem está dando a ação e quem vai receber, para não restar dúvida
+function seatActionRole(p) {
+  const pa = state.pendingAction;
+  if (!pa) return null;
+  if (pa.block && pa.block.blockerId === p.id)
+    return { t: "BLOQUEIA", c: "blocker" };
+  if (pa.actorId === p.id) return { t: "ATACA", c: "actor" };
+  if (pa.action?.targetId === p.id) return { t: "ALVO", c: "target" };
+  return null;
 }
 
 function seatResponseBadge(p) {
@@ -1169,7 +1377,18 @@ function renderTable() {
 
   if (!players.length) return;
 
-  const pos = UI.seatPositions(players.length);
+  // raio ajustado ao tamanho real da mesa: o assento é largo e a foto vaza
+  // ~20px para fora, então o círculo tem de encolher em telas estreitas
+  const areaW = els.tableArea?.clientWidth || 900;
+  const areaH = els.tableArea?.clientHeight || 620;
+  const anySeat = seatEls.values().next().value;
+  const seatW = (anySeat?.root.offsetWidth || 268) + 26; // + folga da foto
+  const seatH = (anySeat?.root.offsetHeight || 200) + 16;
+
+  const rx = Math.max(12, Math.min(38, ((areaW - seatW) / 2 / areaW) * 100));
+  const ry = Math.max(12, Math.min(33, ((areaH - seatH) / 2 / areaH) * 100));
+
+  const pos = UI.seatPositions(players.length, rx, ry);
   const validTargets = targeting
     ? new Set(aliveOpponents().map((p) => p.id))
     : null;
@@ -1205,10 +1424,26 @@ function renderTable() {
     s.root.classList.toggle("responded", responded);
 
     if (s.nick.textContent !== p.nick) s.nick.textContent = p.nick;
+    updateAvatar(s, p);
 
     if (s.coins.textContent !== String(p.coins))
       s.coins.textContent = String(p.coins);
+    updateCoinStack(s, p.coins);
     s.money.classList.toggle("rich", p.coins >= 10);
+
+    // destaque de quem ataca e quem recebe
+    const role = seatActionRole(p);
+    s.roleTag.classList.toggle("hidden", !role);
+    s.root.classList.toggle("isActor", role?.c === "actor");
+    s.root.classList.toggle("isTarget", role?.c === "target");
+    s.root.classList.toggle("isBlocker", role?.c === "blocker");
+    if (role && s.roleTag.dataset.t !== role.t) {
+      s.roleTag.dataset.t = role.t;
+      s.roleTag.textContent = role.t;
+      s.roleTag.className = `roleTag ${role.c}`;
+    } else if (!role) {
+      s.roleTag.dataset.t = "";
+    }
 
     const badge = seatResponseBadge(p);
     const wasHidden = s.badge.classList.contains("hidden");
@@ -1346,6 +1581,27 @@ function renderExchangeModal() {
   els.exchangeModal.classList.remove("hidden");
 }
 
+function renderPause() {
+  const pz = state?.paused;
+  if (!pz) {
+    els.pauseOverlay.classList.add("hidden");
+    return;
+  }
+
+  els.pauseBy.textContent = `por ${pz.byNick}`;
+  els.pauseClock.textContent = UI.timeLeft(pz.untilAt);
+  els.pauseOverlay.classList.toggle(
+    "urgent",
+    UI.secsLeft(pz.untilAt) <= 20,
+  );
+
+  // só o host retoma
+  els.resumeBtn.style.display =
+    state.hostId === myId ? "inline-flex" : "none";
+
+  els.pauseOverlay.classList.remove("hidden");
+}
+
 function renderWinner() {
   const w = state?.winner;
   const fresh = w && Date.now() - w.ts < 3 * 60_000;
@@ -1387,6 +1643,7 @@ function renderAll() {
   renderDiscard();
   renderLossModal();
   renderExchangeModal();
+  renderPause();
   renderWinner();
 }
 
@@ -1394,5 +1651,6 @@ setInterval(() => {
   if (!state) return;
   renderTop();
   renderRespTimer();
+  if (state.paused) renderPause();
   if (state.started) renderTable();
 }, 250);

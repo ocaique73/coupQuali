@@ -28,6 +28,7 @@
         <div class="hostRow">
           <div id="hostControls" class="hostControls">
             <button id="startBtn" class="btn primary">Iniciar (Host)</button>
+            <button id="pauseBtn" class="btn warn">⏸ Pausar</button>
             <button id="restartBtn" class="btn">Reiniciar (Host)</button>
           </div>
 
@@ -48,8 +49,27 @@
       <div class="panel main tablePanel">
         <div id="joinBox" class="joinBox">
           <h2>Entrar na sala</h2>
-          <p>Digite seu nick (máx 20):</p>
+
+          <label class="fieldLabel" for="nickInput">Seu nick (máx 20)</label>
           <input id="nickInput" maxlength="20" placeholder="Seu nick..." />
+
+          <label class="fieldLabel" for="avatarInput">
+            Foto (opcional) — cole o link de uma imagem
+          </label>
+          <div class="avatarRow">
+            <input
+              id="avatarInput"
+              maxlength="500"
+              placeholder="https://.../sua-foto.jpg"
+            />
+            <div class="avatarPreview" id="avatarPreview">
+              <span>👤</span>
+            </div>
+          </div>
+          <div class="fieldHint" id="avatarHint">
+            Precisa começar com http:// ou https://
+          </div>
+
           <button id="joinBtn" class="btn primary">Entrar</button>
         </div>
 
@@ -209,6 +229,18 @@
         <button id="winnerBackBtn" class="btn primary big">
           Voltar ao lobby
         </button>
+      </div>
+    </div>
+
+    <!-- Overlay: partida pausada -->
+    <div id="pauseOverlay" class="pauseOverlay hidden">
+      <div class="pauseCard">
+        <div class="pauseIcon">⏸</div>
+        <div class="pauseTitle">PARTIDA PAUSADA</div>
+        <div class="pauseBy" id="pauseBy">—</div>
+        <div class="pauseClock" id="pauseClock">3:00</div>
+        <div class="pauseSub">Retoma sozinha quando o tempo acabar</div>
+        <button id="resumeBtn" class="btn primary big">▶ Retomar</button>
       </div>
     </div>
 
