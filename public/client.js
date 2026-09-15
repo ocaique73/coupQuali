@@ -61,6 +61,11 @@ const els = {
   bankPile: document.getElementById("bankPile"),
   deckCount: document.getElementById("deckCount"),
 
+  quickChat: document.getElementById("quickChat"),
+  chatInput: document.getElementById("chatInput"),
+  chatSend: document.getElementById("chatSend"),
+  chatLeft: document.getElementById("chatLeft"),
+
   log: document.getElementById("log"),
   discard: document.getElementById("discard"),
   roleGuide: document.getElementById("roleGuide"),
@@ -215,6 +220,20 @@ const ACTIONS = [
     cost: 7,
     desc: "Paga 7, o alvo perde 1 carta. Impossível bloquear.",
   },
+];
+
+// chat rápido: cada opção vira um evento "emote" no servidor
+const QUICK = [
+  { kind: "bang", icon: "🤜", label: "Bater na mesa" },
+  { kind: "clap", icon: "👏", label: "Nice!" },
+  { kind: "thumbs", icon: "👍", label: "Boa!" },
+  { kind: "laugh", icon: "😂", label: "Kkkk" },
+  { kind: "think", icon: "🤔", label: "Será?" },
+  { kind: "lie", icon: "🤥", label: "Mentira!" },
+  { kind: "sweat", icon: "😰", label: "Tenso..." },
+  // "L" como letra: os emojis de mão em L são de 2022 e podem não existir
+  { kind: "l13", icon: "L", label: "Faz o L" },
+  { kind: "finger", icon: "🖕", label: "Dedo" },
 ];
 
 const PHASE_PT = {
@@ -561,6 +580,15 @@ function scheduleEvent(ev) {
       }, 600);
       break;
 
+    case "chat":
+      // balão não entra na fila: tem de aparecer na hora
+      showChatBubble(ev.playerId, ev.text);
+      break;
+
+    case "emote":
+      playEmote(ev);
+      break;
+
     case "paused":
       FX.clearQueue();
       FX.banner({ title: `⏸ ${ev.byNick} pausou`, cls: "warn", dur: 1400 });
@@ -593,6 +621,75 @@ function scheduleEvent(ev) {
         FX.ping(seatEls.get(ev.playerId)?.root, "turnPulse", 900);
       }, 700);
       break;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* chat e chat rápido na mesa                                           */
+/* ------------------------------------------------------------------ */
+
+const chatTimers = new Map();
+
+function showChatBubble(playerId, text) {
+  const s = seatEls.get(playerId);
+  if (!s) return; // quem está na fila não tem card; a mensagem fica só no Log
+
+  s.chat.textContent = text;
+  s.chat.classList.add("on");
+  FX.ping(s.chat, "chatIn", 420);
+
+  clearTimeout(chatTimers.get(playerId));
+  // mensagens longas ficam mais tempo na tela
+  const ms = Math.min(9000, 3200 + text.length * 45);
+  chatTimers.set(
+    playerId,
+    setTimeout(() => s.chat.classList.remove("on"), ms),
+  );
+}
+
+const EMOTE_TEXT = {
+  clap: "Nice!",
+  thumbs: "Boa!",
+  laugh: "Kkkkk",
+  think: "Será?",
+  lie: "Mentira!",
+  sweat: "Tenso...",
+  bang: "",
+  finger: "",
+  l13: "",
+};
+
+function playEmote(ev) {
+  const s = seatEls.get(ev.playerId);
+  const at = seatRect(ev.playerId);
+  if (!at) return;
+
+  const txt = EMOTE_TEXT[ev.kind];
+  if (txt) showChatBubble(ev.playerId, txt);
+
+  switch (ev.kind) {
+    case "bang":
+      // mão batendo na mesa: o card treme e as cartas de TODOS balançam
+      FX.handBang(at);
+      FX.ping(s?.card, "cardShakeHard", 900);
+      for (const [, o] of seatEls)
+        o.cards.forEach((c, i) => FX.ping(c, "cardJolt", 700 + i * 60));
+      break;
+
+    case "finger":
+      FX.handRise(at, "🖕");
+      break;
+
+    case "l13":
+      FX.handL(at);
+      break;
+
+    case "clap":
+      FX.clap(at);
+      break;
+
+    default:
+      FX.floatText({ at, text: QUICK.find((q) => q.kind === ev.kind)?.icon || "!", cls: "big" });
   }
 }
 
@@ -655,6 +752,41 @@ refreshAvatarPreview();
 
 els.pauseBtn.onclick = () => socket.emit("pause");
 els.resumeBtn.onclick = () => socket.emit("resume");
+
+/* ---------------- chat ---------------- */
+
+function sendChat() {
+  const t = (els.chatInput.value || "").trim().slice(0, 150);
+  if (!t) return;
+  socket.emit("chat", { text: t });
+  els.chatInput.value = "";
+  updateChatCount();
+}
+
+function updateChatCount() {
+  els.chatLeft.textContent = String(150 - (els.chatInput.value || "").length);
+}
+
+els.chatSend.onclick = sendChat;
+els.chatInput.oninput = updateChatCount;
+els.chatInput.onkeydown = (e) => {
+  if (e.key === "Enter") sendChat();
+};
+updateChatCount();
+
+function renderQuickChat() {
+  if (els.quickChat.dataset.done) return;
+  els.quickChat.dataset.done = "1";
+
+  for (const q of QUICK) {
+    const b = document.createElement("button");
+    b.className = `qBtn q-${q.kind}`;
+    b.title = q.label;
+    b.innerHTML = `<span class="qIcon">${q.icon}</span><span class="qLbl">${UI.escape(q.label)}</span>`;
+    b.onclick = () => socket.emit("emote", { kind: q.kind });
+    els.quickChat.appendChild(b);
+  }
+}
 
 els.readyBtn.onclick = () => socket.emit("toggle_ready");
 els.startBtn.onclick = () => socket.emit("start");
@@ -855,12 +987,22 @@ function renderHostButtons() {
 }
 
 function renderRoomPeople() {
-  els.roomPeople.innerHTML = "";
   const people = state?.roomPlayers || [];
   const isHost = state?.hostId === myId;
   const max = state?.maxSeats ?? 6;
 
   els.seatCount.textContent = `${people.length}/${max}`;
+
+  // sem isso a lista inteira re-animava a cada mensagem de chat
+  const sig = JSON.stringify([
+    people.map((p) => [p.id, p.nick, p.ready, p.inGame, p.connected, p.isHost]),
+    isHost,
+    !!state.started,
+  ]);
+  if (els.roomPeople.dataset.sig === sig) return;
+  els.roomPeople.dataset.sig = sig;
+
+  els.roomPeople.innerHTML = "";
 
   if (!people.length) {
     els.roomPeople.innerHTML = `<div class="emptyNote">Sala vazia.</div>`;
@@ -902,12 +1044,22 @@ function renderRoomPeople() {
 }
 
 function renderQueue() {
-  els.queue.innerHTML = "";
   const list = state?.queue || [];
   const isHost = state?.hostId === myId;
   const free = state?.seatsFree ?? 0;
 
   els.queueCount.textContent = list.length ? String(list.length) : "";
+
+  const sig = JSON.stringify([
+    list.map((p) => [p.id, p.nick, p.isHost]),
+    isHost,
+    free,
+    !!state.started,
+  ]);
+  if (els.queue.dataset.sig === sig) return;
+  els.queue.dataset.sig = sig;
+
+  els.queue.innerHTML = "";
 
   if (!list.length) {
     els.queue.innerHTML = `<div class="emptyNote">Ninguém esperando.</div>`;
@@ -1253,6 +1405,7 @@ function buildSeat(pid) {
     </div>
 
     <div class="seatBadge hidden"></div>
+    <div class="seatChat"></div>
 
     <div class="seatTimer">
       <span class="tText">—</span>
@@ -1270,6 +1423,7 @@ function buildSeat(pid) {
     stack: root.querySelector(".coinStack"),
     money: root.querySelector(".moneyTag"),
     badge: root.querySelector(".seatBadge"),
+    chat: root.querySelector(".seatChat"),
     timerWrap: root.querySelector(".seatTimer"),
     timer: root.querySelector(".tText"),
     bar: root.querySelector(".tBar i"),
@@ -1401,6 +1555,16 @@ function renderTable() {
     // assentos da metade direita jogam o badge para o lado de dentro,
     // senão ele sairia da mesa
     s.root.classList.toggle("badgeLeft", pos[i].x > 50);
+    // o balão de fala fica à esquerda do card; nos assentos da metade
+    // esquerda ele iria para fora da mesa, então vira para dentro
+    s.root.classList.toggle("chatRight", pos[i].x < 50);
+
+    // cor própria de cada jogador (contorno do card)
+    const col = `var(--pc${(p.color ?? 0) % 6})`;
+    if (s.root.dataset.col !== String(p.color)) {
+      s.root.dataset.col = String(p.color);
+      s.root.style.setProperty("--seatColor", col);
+    }
 
     const current = state.phase === "turn" && state.currentPlayerId === p.id;
     const dead = p.aliveCount <= 0;
@@ -1634,6 +1798,7 @@ function renderAll() {
   renderHostButtons();
 
   renderTurnHint();
+  renderQuickChat();
   renderActions();
   renderRoleGuide();
   renderReactionBoxes();

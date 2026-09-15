@@ -312,6 +312,131 @@
       this.ping(el, "fxShake", 520);
     },
 
+    // ---------- chat rápido ----------
+
+    // mão batendo na mesa, três vezes
+    handBang(at) {
+      if (!at) return;
+      const c = centerOf(at);
+      const el = spawn("🤜", "fxHand fxBang", {
+        left: `${c.x}px`,
+        top: `${at.bottom + 6}px`,
+      });
+
+      return run(
+        el,
+        [
+          { transform: "translate(-50%,-50%) rotate(-38deg) scale(1)", opacity: 0 },
+          { transform: "translate(-50%,-90%) rotate(-38deg) scale(1.1)", opacity: 1, offset: 0.12 },
+          { transform: "translate(-50%,-45%) rotate(-6deg) scale(1)", opacity: 1, offset: 0.26 },
+          { transform: "translate(-50%,-90%) rotate(-34deg) scale(1.08)", opacity: 1, offset: 0.42 },
+          { transform: "translate(-50%,-45%) rotate(-6deg) scale(1)", opacity: 1, offset: 0.56 },
+          { transform: "translate(-50%,-90%) rotate(-34deg) scale(1.08)", opacity: 1, offset: 0.72 },
+          { transform: "translate(-50%,-45%) rotate(-6deg) scale(1)", opacity: 1, offset: 0.86 },
+          { transform: "translate(-50%,-50%) rotate(-38deg) scale(.9)", opacity: 0 },
+        ],
+        { duration: 1500, easing: "ease-in-out" },
+      );
+    },
+
+    // mão subindo devagar (dedo do meio)
+    handRise(at, glyph) {
+      if (!at) return;
+      const c = centerOf(at);
+      const el = spawn(glyph, "fxHand fxRise", {
+        left: `${c.x}px`,
+        top: `${at.bottom + 10}px`,
+      });
+
+      return run(
+        el,
+        [
+          { transform: "translate(-50%,10%) scale(.55)", opacity: 0 },
+          { transform: "translate(-50%,-30%) scale(.85)", opacity: 1, offset: 0.3 },
+          { transform: "translate(-50%,-135%) scale(1.5)", opacity: 1, offset: 0.72 },
+          { transform: "translate(-50%,-150%) scale(1.5)", opacity: 1, offset: 0.88 },
+          { transform: "translate(-50%,-165%) scale(1.4)", opacity: 0 },
+        ],
+        { duration: 2200, easing: "cubic-bezier(.3,.7,.3,1)" },
+      );
+    },
+
+    // mão fazendo "L" e depois o 13 em vermelho
+    handL(at) {
+      if (!at) return;
+      const c = centerOf(at);
+
+      const hand = spawn(
+        `<svg viewBox="0 0 100 120" width="54" height="66" aria-hidden="true">
+           <g fill="#f3c08a" stroke="#8a5a34" stroke-width="4" stroke-linejoin="round">
+             <rect x="40" y="10" width="20" height="62" rx="10"/>
+             <rect x="28" y="62" width="58" height="20" rx="10"
+                   transform="rotate(0 28 62)"/>
+             <path d="M30 60 h34 a14 14 0 0 1 14 14 v20 a14 14 0 0 1 -14 14 h-34
+                      a14 14 0 0 1 -14 -14 v-20 a14 14 0 0 1 14 -14 z"/>
+           </g>
+         </svg>`,
+        "fxHand fxHandL",
+        { left: `${c.x}px`, top: `${at.bottom + 8}px` },
+      );
+
+      run(
+        hand,
+        [
+          { transform: "translate(-50%,10%) scale(.5) rotate(-18deg)", opacity: 0 },
+          { transform: "translate(-50%,-70%) scale(1.15) rotate(0deg)", opacity: 1, offset: 0.35 },
+          { transform: "translate(-50%,-80%) scale(1.15) rotate(0deg)", opacity: 1, offset: 0.62 },
+          { transform: "translate(-50%,-95%) scale(1) rotate(6deg)", opacity: 0 },
+        ],
+        { duration: 1900 },
+      );
+
+      const num = spawn("13", "fxL13", {
+        left: `${c.x}px`,
+        top: `${at.top - 6}px`,
+      });
+
+      return run(
+        num,
+        [
+          { transform: "translate(-50%,40%) scale(.3) rotate(-14deg)", opacity: 0 },
+          { transform: "translate(-50%,-10%) scale(1.5) rotate(6deg)", opacity: 1, offset: 0.55 },
+          { transform: "translate(-50%,-25%) scale(1.25) rotate(0deg)", opacity: 1, offset: 0.8 },
+          { transform: "translate(-50%,-55%) scale(1.1)", opacity: 0 },
+        ],
+        { duration: 2000, delay: 700 },
+      );
+    },
+
+    // duas mãos batendo palma
+    clap(at) {
+      if (!at) return;
+      const c = centerOf(at);
+      const y = at.top - 4;
+
+      const mk = (glyph, dir, flip) => {
+        const el = spawn(glyph, `fxHand fxClap${flip ? " flip" : ""}`, {
+          left: `${c.x}px`,
+          top: `${y}px`,
+        });
+        return run(
+          el,
+          [
+            { transform: `translate(calc(-50% + ${dir * 42}px),-50%) scale(.8)`, opacity: 0 },
+            { transform: `translate(calc(-50% + ${dir * 30}px),-50%) scale(1.1)`, opacity: 1, offset: 0.18 },
+            { transform: `translate(calc(-50% + ${dir * 6}px),-50%) scale(1.1)`, opacity: 1, offset: 0.34 },
+            { transform: `translate(calc(-50% + ${dir * 28}px),-50%) scale(1.1)`, opacity: 1, offset: 0.5 },
+            { transform: `translate(calc(-50% + ${dir * 6}px),-50%) scale(1.1)`, opacity: 1, offset: 0.66 },
+            { transform: `translate(calc(-50% + ${dir * 26}px),-50%) scale(1.1)`, opacity: 1, offset: 0.82 },
+            { transform: `translate(calc(-50% + ${dir * 40}px),-60%) scale(.9)`, opacity: 0 },
+          ],
+          { duration: 1600, easing: "ease-in-out" },
+        );
+      };
+
+      return Promise.all([mk("👏", -1, false), mk("👏", 1, true)]);
+    },
+
     confetti(host, count = 90) {
       if (!host || reduced) return;
       host.innerHTML = "";

@@ -30,6 +30,25 @@ const ROOM_GRACE_MS = 10 * 60_000;
 
 const ROLES = ["Duke", "Assassin", "Captain", "Ambassador", "Contessa"];
 
+// cada jogador ganha uma cor própria (contorno do card na mesa)
+const PLAYER_COLORS = 6;
+
+// chat
+const CHAT_MAX = 150;
+const CHAT_MIN_MS = 1200; // anti-spam
+const EMOTE_MIN_MS = 1500;
+const EMOTES = new Set([
+  "bang",
+  "finger",
+  "clap",
+  "laugh",
+  "think",
+  "lie",
+  "thumbs",
+  "sweat",
+  "l13",
+]);
+
 function now() {
   return Date.now();
 }
@@ -173,6 +192,23 @@ function aliveCount(p) {
   return (p.hand || []).filter((c) => c.alive).length;
 }
 
+// dá ao jogador a menor cor livre entre quem está sentado, para dois vizinhos
+// nunca ficarem com o mesmo contorno
+function assignColor(room, p) {
+  const used = new Set(
+    room.players
+      .filter((x) => x !== p && x.seated && (x.connected || x.inGame))
+      .map((x) => x.color),
+  );
+  for (let i = 0; i < PLAYER_COLORS; i++) {
+    if (!used.has(i)) {
+      p.color = i;
+      return;
+    }
+  }
+  p.color = 0;
+}
+
 function electHost(room) {
   // prefere alguem sentado; so cai para a fila se a sala estiver vazia
   const seated = seatedPlayers(room);
@@ -266,6 +302,7 @@ function roomPublicState(room, viewerId) {
     id: p.id,
     nick: p.nick,
     avatar: p.avatar || null,
+    color: p.color ?? 0,
     ready: !!p.ready,
     inGame: !!p.inGame,
     connected: !!p.connected,
@@ -302,6 +339,7 @@ function roomPublicState(room, viewerId) {
       id: p.id,
       nick: p.nick,
       avatar: p.avatar || null,
+      color: p.color ?? 0,
       coins: p.coins,
       connected: p.connected,
       aliveCount: aliveCount(p),
@@ -1042,6 +1080,7 @@ io.on("connection", (socket) => {
         hand: [],
       };
       room.players.push(p);
+      if (canSit) assignColor(room, p);
       addLog(
         room,
         canSit
@@ -1107,6 +1146,7 @@ io.on("connection", (socket) => {
 
     p.seated = true;
     p.ready = false;
+    assignColor(room, p);
     addLog(room, `${p.nick} foi puxado da fila para a sala.`);
     broadcast(room);
   });
@@ -1124,6 +1164,37 @@ io.on("connection", (socket) => {
     p.seated = false;
     p.ready = false;
     addLog(room, `${p.nick} voltou para a fila.`);
+    broadcast(room);
+  });
+
+  socket.on("chat", ({ text }) => {
+    if (!joinedRoomKey) return;
+    const room = getRoom(joinedRoomKey);
+    const p = findPlayer(room, myPid);
+    if (!p || !p.connected) return;
+
+    const t = ("" + (text ?? "")).replace(/\s+/g, " ").trim().slice(0, CHAT_MAX);
+    if (!t) return;
+
+    if (now() - (p.lastChatAt || 0) < CHAT_MIN_MS) return; // anti-spam
+    p.lastChatAt = now();
+
+    pushEvent(room, "chat", { playerId: p.id, nick: p.nick, text: t });
+    addLog(room, `💬 ${p.nick}: ${t}`);
+    broadcast(room);
+  });
+
+  socket.on("emote", ({ kind }) => {
+    if (!joinedRoomKey) return;
+    const room = getRoom(joinedRoomKey);
+    const p = findPlayer(room, myPid);
+    if (!p || !p.connected) return;
+    if (!EMOTES.has(kind)) return;
+
+    if (now() - (p.lastEmoteAt || 0) < EMOTE_MIN_MS) return;
+    p.lastEmoteAt = now();
+
+    pushEvent(room, "emote", { playerId: p.id, nick: p.nick, kind });
     broadcast(room);
   });
 

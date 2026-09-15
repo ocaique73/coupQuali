@@ -41,6 +41,21 @@
         <h2>Fila de espera <span id="queueCount" class="hCount"></span></h2>
         <div id="queue" class="lobby"></div>
 
+        <h2>Chat</h2>
+        <div class="chatBox">
+          <div id="quickChat" class="quickChat"></div>
+          <div class="chatRow">
+            <input
+              id="chatInput"
+              maxlength="150"
+              placeholder="Escreva algo (máx 150)..."
+              autocomplete="off"
+            />
+            <button id="chatSend" class="btn small primary">Enviar</button>
+          </div>
+          <div class="chatCount"><span id="chatLeft">150</span> restantes</div>
+        </div>
+
         <h2>Log</h2>
         <div id="log" class="log"></div>
       </div>
@@ -87,19 +102,24 @@
                   </div>
                 </div>
 
-                <!-- banco: de onde saem e para onde voltam as moedas -->
+                <!-- banco: pilhas SEPARADAS, uma de cada valor -->
                 <div class="bankPile" id="bankPile">
-                  <i class="bankCoin b5"></i>
-                  <i class="bankCoin b4"></i>
-                  <i class="bankCoin b3"></i>
-                  <i class="bankCoin b2"></i>
-                  <i class="bankCoin b1"></i>
+                  <div class="bankCol gold">
+                    <i class="bankCoin c5"></i>
+                    <i class="bankCoin c5"></i>
+                    <i class="bankCoin c5"></i>
+                  </div>
+                  <div class="bankCol silver">
+                    <i class="bankCoin c1"></i>
+                    <i class="bankCoin c1"></i>
+                    <i class="bankCoin c1"></i>
+                  </div>
                 </div>
               </div>
 
               <div class="centerLabels">
                 <span class="deckCount">Baralho <b id="deckCount">—</b></span>
-                <span class="bankLabel">Banco</span>
+                <span class="bankLabel">Banco <b>5</b> / <b>1</b></span>
               </div>
             </div>
 
