@@ -134,16 +134,122 @@ Não há suíte de testes no repo. A validação foi feita com scripts temporár
 
 ---
 
+## Sessão 2 (15/09/2026) — arte, ritmo, modal de resposta e o bug da fila
+
+### Arte real das cartas
+
+Os 5 personagens agora usam as ilustrações em `public/img/*.webp`
+(`ambassador`, `assassin`, `captain`, `contessa`, `duke`). Vieram de PNGs de
+~2,5 MB cada e foram redimensionadas para 460px de largura em WebP q82 —
+**12 MB → 312 KB no total**. Aparecem nas mini-cartas da mesa, nas cartas
+grandes dos modais, nas miniaturas do guia lateral e nas cartas que voam nas
+animações.
+
+Para trocar a arte de um personagem basta substituir o `.webp`: o nome do
+arquivo vem de `ROLE_META[role].cls` em [public/ui.js](public/ui.js), e
+`UI.roleArt()` já cai no emoji como fallback se a imagem não carregar.
+
+> ⚠️ **O emoji 🪙 (U+1FA99) não existe na fonte desta máquina** — aparecia como
+> quadradinho vazio. Foi trocado por uma moeda desenhada em CSS (`.micon`,
+> `.fxCoin`, `.bankCoin`). Testei todos os outros emojis usados e renderizam
+> bem; se for adicionar algum novo, desconfie de emoji lançado depois de 2019.
+
+### Banco de moedas no centro
+
+Faltava a origem visual das moedas: a animação tirava moeda do centro da mesa,
+mas não havia nada lá. Agora existe uma pilha (`#bankPile`) ao lado do baralho,
+e `bankRect()` no client.js é a âncora das animações de moeda.
+
+### Animações 30% mais lentas
+
+`SPEED = 1.3` no topo de [public/fx.js](public/fx.js) — **é o ponto único de
+ajuste**. Multiplica as durações do Web Animations API, as da fila e, via
+`animationDuration` inline no `ping()`, também as keyframes do CSS. Para mudar
+o ritmo do jogo inteiro, mexa só nesse número.
+
+### Respostas em modal
+
+As caixas de Aceitar/Contestar/Bloquear saíram do topo da mesa e viraram o
+modal `#responseModal`, que abre na hora em que outro jogador declara algo, com
+a contagem regressiva no canto.
+
+**O modal fecha assim que você responde** — daí em diante sua resposta aparece
+na mesa, como pedido.
+
+### Resposta ao lado do card, tempo embaixo
+
+O assento foi reestruturado: `.seat` virou só o container de posicionamento e
+`.seatCard` é a caixa visível. A resposta (ACEITA / CONTESTA / BLOQUEIA) fica
+**fora** do card, ao lado dele; o cronômetro com barra de progresso fica **fora
+e abaixo**.
+
+Assentos da metade direita da mesa recebem a classe `.badgeLeft` e jogam o
+badge para o lado de dentro — senão ele sairia da área da mesa.
+
+### Sala × fila (o bug)
+
+Antes `roomPlayers` era *todo mundo conectado* e `lobby` era *todo mundo
+não-em-jogo*, então a mesma pessoa aparecia nas duas listas. Agora existe
+`p.seated` no servidor e os conjuntos são **disjuntos**:
+
+- **Sala** = `seatedPlayers()`, no máximo `MAX_SEATS` (6)
+- **Fila** = `queuedPlayers()` — quem chegou com a sala cheia **ou** com a
+  partida já em andamento
+- O host puxa com `promote` e devolve para a fila com `demote` (só fora de
+  partida)
+- Quem está na fila não fica READY e não entra na partida
+
+---
+
+## Como a sessão 2 foi testada
+
+Mesmo esquema: scripts temporários, fora do repositório.
+
+1. **Sala × fila** — 7 jogadores: 6 sentam e 1 vai para a fila; os conjuntos
+   não se cruzam; quem está na fila não consegue ficar READY; `demote` abre
+   cadeira; `promote` traz de volta; quem entra com a partida rolando cai na
+   fila; e o host não consegue puxar durante a partida. **19/19 passaram.**
+2. **Cliente em DOM headless** — badge é filho direto do `.seat` (ou seja, fora
+   do card), cronômetro renderiza depois do card, cartas usando `<img>` de
+   `/img/*.webp`, guia com as 5 miniaturas, banco de moedas presente,
+   contadores `2/6` e `1`, botão Puxar para o host, modal abrindo e **fechando
+   após responder**, badge virando CONTESTA, mais o gating de sempre.
+   **26/26 passaram, zero erro de runtime.**
+3. **Screenshots reais** (Chrome headless, com o estado renderizado) da mesa e
+   do modal — foi assim que apareceu o emoji 🪙 quebrado, que nenhum teste de
+   lógica pegaria.
+
+> O jogo ainda **não foi jogado de verdade num navegador com várias pessoas**.
+> Layout e lógica estão conferidos; o que falta julgar é o *ritmo* das
+> animações jogando de fato.
+
+### Reproduzindo os screenshots
+
+O Chrome headless trava se sobrar processo de uma execução anterior. O que
+funcionou:
+
+```bash
+taskkill //F //IM chrome.exe
+"/c/Program Files/Google/Chrome/Application/chrome.exe" \
+  --headless=new --no-sandbox --disable-gpu --no-first-run \
+  --user-data-dir="<perfil novo a cada vez>" \
+  --window-size=1680,1000 --virtual-time-budget=4000 \
+  --screenshot=saida.png http://localhost:3000/__preview.html
+```
+
+A página `__preview.html` era gerada com jsdom (roda o client com um estado
+falso e serializa o DOM sem os `<script>`) e apagada depois — não está no repo.
+
+---
+
 ## Próximos passos sugeridos
 
-1. **Abrir no navegador com 2–3 abas e jogar uma partida inteira.** Ajustar
-   durações no `scheduleEvent()` (`client.js`) se algo ficar lento ou atropelado.
+1. **Abrir no navegador com 2–3 abas e jogar uma partida inteira.** Se o ritmo
+   não agradar, ajuste `SPEED` em `public/fx.js` (hoje 1.3) — é o único lugar.
 2. **Som.** Os eventos já estão todos estruturados — dá para pendurar áudio no
    `scheduleEvent()` sem tocar em mais nada. Provavelmente o maior ganho de
    "legal de jogar" pelo menor esforço.
-3. **Arte das cartas.** Hoje é emoji + cor. Trocar por ilustração deixaria muito
-   mais bonito; o ponto de mudança é `renderMiniCard`/`updateMiniCard` e
-   `UI.ROLE_META`.
+3. ~~Arte das cartas~~ — feito na sessão 2 (`public/img/*.webp`).
 4. **Mostrar quem ainda não respondeu** durante a fase de reação (hoje mostra
    quem já respondeu).
 5. **`.gitignore` para `node_modules`.** ⚠️ Hoje `node_modules` está
@@ -166,3 +272,4 @@ Não há suíte de testes no repo. A validação foi feita com scripts temporár
 | [public/ui.js](public/ui.js) | Metadados dos personagens, formatação, posições dos assentos |
 | [public/styles.css](public/styles.css) | Visual + todos os `@keyframes` |
 | [public/index.html](public/index.html) | Estrutura, modais, overlay do vencedor |
+| [public/img/](public/img/) | Arte dos 5 personagens (WebP) |

@@ -17,7 +17,9 @@ const els = {
   readyBtn: document.getElementById("readyBtn"),
 
   roomPeople: document.getElementById("roomPeople"),
-  lobby: document.getElementById("lobby"),
+  seatCount: document.getElementById("seatCount"),
+  queue: document.getElementById("queue"),
+  queueCount: document.getElementById("queueCount"),
 
   turnHint: document.getElementById("turnHint"),
   actions: document.getElementById("actions"),
@@ -25,6 +27,8 @@ const els = {
   targetActionName: document.getElementById("targetActionName"),
   cancelTargetBtn: document.getElementById("cancelTargetBtn"),
 
+  responseModal: document.getElementById("responseModal"),
+  respTimer: document.getElementById("respTimer"),
   reactionBox: document.getElementById("reactionBox"),
   pendingText: document.getElementById("pendingText"),
   reactionHint: document.getElementById("reactionHint"),
@@ -44,6 +48,7 @@ const els = {
   tableArea: document.getElementById("tableArea"),
   tableSeats: document.getElementById("tableSeats"),
   deckStack: document.getElementById("deckStack"),
+  bankPile: document.getElementById("bankPile"),
   deckCount: document.getElementById("deckCount"),
 
   log: document.getElementById("log"),
@@ -93,7 +98,7 @@ els.roomCode.textContent = roomKey;
 const ACTIONS = [
   {
     type: "income",
-    icon: "🪙",
+    icon: "💵",
     label: "Renda",
     tag: "+1",
     tagCls: "gain",
@@ -146,7 +151,7 @@ const ACTIONS = [
     type: "exchange",
     icon: "🎭",
     label: "Trocar",
-    tag: "🔄",
+    tag: "↔",
     tagCls: "",
     needsTarget: false,
     claim: "Ambassador",
@@ -220,6 +225,10 @@ function nickOf(id) {
 
 function deckRect() {
   return FX.rect(els.deckStack) || FX.rect(els.tableArea);
+}
+// banco de moedas no centro: origem/destino das moedas que entram e saem
+function bankRect() {
+  return FX.rect(els.bankPile) || deckRect();
 }
 function seatRect(pid) {
   return FX.rect(seatEls.get(pid)?.root);
@@ -302,7 +311,7 @@ function scheduleEvent(ev) {
       const gain = ev.delta > 0;
       FX.enqueue((sp) => {
         const seat = seatMoneyRect(ev.playerId);
-        const bank = deckRect();
+        const bank = bankRect();
         FX.flyCoins({
           from: gain ? bank : seat,
           to: gain ? seat : bank,
@@ -314,6 +323,7 @@ function scheduleEvent(ev) {
           text: `${gain ? "+" : ""}${ev.delta}`,
           cls: gain ? "gain" : "cost",
         });
+        FX.ping(els.bankPile, "bankPulse", 600);
         FX.ping(seatEls.get(ev.playerId)?.money, gain ? "coinUp" : "coinDown");
       }, 620);
       break;
@@ -686,29 +696,35 @@ function renderHostButtons() {
   els.hostControls.style.display = isHost ? "flex" : "none";
   if (!isHost) return;
 
-  const people = state.roomPlayers || [];
-  const lobby = state.lobby || [];
-  const connectedCount = people.length;
+  // só conta quem está SENTADO — a fila não entra na conta
+  const seated = state.roomPlayers || [];
+  const max = state.maxSeats ?? 6;
 
-  const allReady = lobby.length >= 2 && lobby.every((p) => p.ready);
+  const allReady = seated.length >= 2 && seated.every((p) => p.ready);
   const canStart =
-    !state.started && connectedCount >= 2 && connectedCount <= 6 && allReady;
+    !state.started && seated.length >= 2 && seated.length <= max && allReady;
 
   els.startBtn.disabled = !canStart;
   els.startBtn.title = canStart
     ? "Começar a partida"
     : state.started
       ? "A partida já começou"
-      : "Precisa de 2 a 6 jogadores, todos READY";
+      : seated.length < 2
+        ? "Precisa de pelo menos 2 jogadores na sala"
+        : "Todos na sala precisam estar READY";
   els.restartBtn.disabled = !state.started;
 }
 
 function renderRoomPeople() {
   els.roomPeople.innerHTML = "";
   const people = state?.roomPlayers || [];
+  const isHost = state?.hostId === myId;
+  const max = state?.maxSeats ?? 6;
+
+  els.seatCount.textContent = `${people.length}/${max}`;
 
   if (!people.length) {
-    els.roomPeople.innerHTML = `<div class="emptyNote">Ninguém conectado.</div>`;
+    els.roomPeople.innerHTML = `<div class="emptyNote">Sala vazia.</div>`;
     return;
   }
 
@@ -722,35 +738,86 @@ function renderRoomPeople() {
       </div>
       <span class="readyTag">${p.inGame ? "EM JOGO" : p.ready ? "READY" : "NOT READY"}</span>
     `;
+
+    // host pode devolver alguém para a fila enquanto não começou
+    if (isHost && !state.started && p.id !== myId) {
+      const btn = document.createElement("button");
+      btn.className = "btn tiny";
+      btn.textContent = "→ fila";
+      btn.title = `Mandar ${p.nick} para a fila`;
+      btn.onclick = () => socket.emit("demote", { playerId: p.id });
+      row.querySelector(".readyTag").replaceWith(btn);
+    }
+
     els.roomPeople.appendChild(row);
   }
 }
 
-function renderLobby() {
-  els.lobby.innerHTML = "";
-  const list = state?.lobby || [];
+function renderQueue() {
+  els.queue.innerHTML = "";
+  const list = state?.queue || [];
+  const isHost = state?.hostId === myId;
+  const free = state?.seatsFree ?? 0;
+
+  els.queueCount.textContent = list.length ? String(list.length) : "";
 
   if (!list.length) {
-    els.lobby.innerHTML = `<div class="emptyNote">Ninguém no lobby.</div>`;
-  } else {
-    for (const p of list) {
-      const row = document.createElement("div");
-      row.className = "lobbyItem";
-      row.innerHTML = `
-        <div class="lobbyWho">
-          <span class="readyDot ${p.ready ? "on" : ""}"></span>
-          <b>${UI.escape(p.nick)}</b>
-        </div>
-        <span class="readyTag">${p.ready ? "READY" : "NOT READY"}</span>
-      `;
-      els.lobby.appendChild(row);
-    }
+    els.queue.innerHTML = `<div class="emptyNote">Ninguém esperando.</div>`;
+    return;
   }
 
-  const meLobby = list.find((p) => p.id === myId);
-  els.readyBtn.textContent = meLobby?.ready ? "Cancelar READY" : "Ficar READY";
-  els.readyBtn.classList.toggle("ok", !!meLobby?.ready);
+  for (const p of list) {
+    const row = document.createElement("div");
+    row.className = `lobbyItem ${p.id === myId ? "meRow" : ""}`;
+    row.innerHTML = `
+      <div class="lobbyWho">
+        <span class="queueDot"></span>
+        <b>${UI.escape(p.nick)}${p.isHost ? " 👑" : ""}</b>
+      </div>
+    `;
+
+    if (isHost) {
+      const btn = document.createElement("button");
+      btn.className = "btn tiny ok";
+      btn.textContent = "Puxar";
+      const can = !state.started && free > 0;
+      btn.disabled = !can;
+      btn.title = can
+        ? `Trazer ${p.nick} para a sala`
+        : state.started
+          ? "Não dá para puxar com a partida em andamento"
+          : "A sala está cheia";
+      btn.onclick = () => socket.emit("promote", { playerId: p.id });
+      row.appendChild(btn);
+    } else {
+      const tag = document.createElement("span");
+      tag.className = "readyTag";
+      tag.textContent = "AGUARDANDO";
+      row.appendChild(tag);
+    }
+
+    els.queue.appendChild(row);
+  }
+}
+
+function renderReadyButton() {
+  const seat = (state?.roomPlayers || []).find((p) => p.id === myId);
+
+  // quem está na fila não fica READY
+  if (!seat) {
+    els.readyBtn.textContent = "Na fila";
+    els.readyBtn.classList.remove("ok");
+    els.readyBtn.disabled = true;
+    els.readyBtn.title = "Você está na fila — aguarde o host puxar você";
+    return;
+  }
+
+  els.readyBtn.textContent = seat.ready ? "Cancelar READY" : "Ficar READY";
+  els.readyBtn.classList.toggle("ok", !!seat.ready);
   els.readyBtn.disabled = !!state.started;
+  els.readyBtn.title = state.started
+    ? "Partida em andamento"
+    : "Marque READY para o host poder iniciar";
 }
 
 function renderTurnHint() {
@@ -760,8 +827,11 @@ function renderTurnHint() {
     return;
   }
   if (!amIInGame()) {
+    const inQueue = (state.queue || []).some((p) => p.id === myId);
     els.turnHint.className = "turnHint";
-    els.turnHint.textContent = "Você está na fila. Aguarde a próxima partida.";
+    els.turnHint.textContent = inQueue
+      ? "Você está na fila. O host precisa te puxar para a sala."
+      : "Você está na sala, mas fora desta partida. Aguarde a próxima.";
     return;
   }
   const m = me();
@@ -845,7 +915,7 @@ function renderRoleGuide() {
     const row = document.createElement("div");
     row.className = `guideRow ${meta.cls}`;
     row.innerHTML = `
-      <span class="gIcon">${meta.icon}</span>
+      <span class="gThumb">${UI.roleArt(role)}</span>
       <span class="gBody">
         <b>${meta.pt}</b>
         <span class="gDoes">${meta.does}</span>
@@ -907,9 +977,11 @@ function resetChoiceStyles() {
 }
 
 function renderReactionBoxes() {
-  if (!amIInGame()) {
+  const m = me();
+  if (!m || m.aliveCount <= 0) {
     els.reactionBox.classList.add("hidden");
     els.blockChallengeBox.classList.add("hidden");
+    els.responseModal.classList.add("hidden");
     return;
   }
 
@@ -917,7 +989,15 @@ function renderReactionBoxes() {
   resetChoiceStyles();
 
   // ---- fase de reação ----
-  if (!pending || state.phase !== "reaction" || pending.actorId === myId) {
+  // o modal some assim que EU respondo: minha resposta passa a aparecer
+  // ao lado do meu card na mesa
+  const myReactionNow = state?.reactions?.[myId];
+  if (
+    !pending ||
+    state.phase !== "reaction" ||
+    pending.actorId === myId ||
+    myReactionNow
+  ) {
     els.reactionBox.classList.add("hidden");
   } else {
     const claim = pending.claimRole
@@ -933,52 +1013,56 @@ function renderReactionBoxes() {
 
     els.reactionHint.textContent = blockHint(pending);
 
-    const myReaction = state.reactions?.[myId];
-
-    els.acceptBtn.classList.toggle("chosen", myReaction === "accept");
-    els.contestBtn.classList.toggle("chosen", myReaction === "contest");
-    els.blockBtn.classList.toggle("chosen", myReaction === "block");
-
     // só aparece o que dá para usar
     els.contestBtn.style.display = pending.claimRole ? "inline-flex" : "none";
     els.blockBtn.style.display = canIBlock(pending) ? "inline-flex" : "none";
-
-    if (myReaction) {
-      els.acceptBtn.disabled = true;
-      els.contestBtn.disabled = true;
-      els.blockBtn.disabled = true;
-      els.reactionHint.textContent = "Resposta enviada. Aguardando os outros...";
-    }
 
     els.reactionBox.classList.remove("hidden");
   }
 
   // ---- fase de contestação do bloqueio ----
+  const myDecisionNow = state?.blockChallenges?.[myId];
   if (
     state.phase !== "block_challenge" ||
     !pending?.block ||
-    pending.block.blockerId === myId
+    pending.block.blockerId === myId ||
+    myDecisionNow
   ) {
     els.blockChallengeBox.classList.add("hidden");
   } else {
     const blk = pending.block;
-    const myDecision = state.blockChallenges?.[myId];
-
-    els.blockAcceptBtn.classList.toggle("chosen", myDecision === "accept");
-    els.blockContestBtn.classList.toggle("chosen", myDecision === "contest");
 
     els.blockText.textContent = `${blk.blockerNick} bloqueou alegando ${UI.rolePt(blk.claimRole)}.`;
-    els.blockChallengeHint.textContent = myDecision
-      ? "Resposta enviada. Aguardando os outros..."
-      : `Se você contestar e ${blk.blockerNick} tiver mesmo ${UI.rolePt(blk.claimRole)}, você perde uma carta.`;
-
-    if (myDecision) {
-      els.blockAcceptBtn.disabled = true;
-      els.blockContestBtn.disabled = true;
-    }
+    els.blockChallengeHint.textContent = `Se você contestar e ${blk.blockerNick} tiver mesmo ${UI.rolePt(blk.claimRole)}, você perde uma carta.`;
 
     els.blockChallengeBox.classList.remove("hidden");
   }
+
+  // o modal existe enquanto houver alguma pergunta aberta para mim
+  const open =
+    !els.reactionBox.classList.contains("hidden") ||
+    !els.blockChallengeBox.classList.contains("hidden");
+
+  els.responseModal.classList.toggle("hidden", !open);
+  if (open) renderRespTimer();
+}
+
+// contagem regressiva dentro do modal de resposta
+function renderRespTimer() {
+  if (!state || els.responseModal.classList.contains("hidden")) return;
+
+  const ts =
+    state.phase === "reaction"
+      ? state.reactionEndsAt
+      : state.blockChallengeEndsAt;
+  if (!ts) {
+    els.respTimer.textContent = "";
+    return;
+  }
+
+  const left = UI.secsLeft(ts);
+  els.respTimer.textContent = `⏱ ${UI.timeLeft(ts)}`;
+  els.respTimer.classList.toggle("urgent", left <= 10);
 }
 
 /* ---------------- mesa (render incremental) ---------------- */
@@ -989,35 +1073,44 @@ function buildSeat(pid) {
   const root = document.createElement("div");
   root.className = "seat";
   root.dataset.pid = pid;
+  // .seat é só o container de posicionamento; .seatCard é a caixa visível.
+  // A resposta (ACEITA/CONTESTA) fica FORA do card, ao lado; o cronômetro
+  // fica FORA também, logo abaixo.
   root.innerHTML = `
-    <div class="seatRing"></div>
-    <div class="seatTop">
-      <div class="playerName">
-        <span class="personIcon">👤</span>
-        <span class="nick"></span>
+    <div class="seatCard">
+      <div class="seatRing"></div>
+      <div class="seatTop">
+        <div class="playerName">
+          <span class="personIcon">👤</span>
+          <span class="nick"></span>
+        </div>
+        <div class="moneyTag"><i class="micon"></i><span class="coins">0</span></div>
       </div>
-      <div class="seatRight">
-        <span class="respBadge hidden"></span>
-        <div class="moneyTag"><span class="micon">🪙</span><span class="coins">0</span></div>
+      <div class="miniHand">
+        <div class="miniCard back" data-idx="0"><div class="cMark">C</div></div>
+        <div class="miniCard back" data-idx="1"><div class="cMark">C</div></div>
       </div>
+      <div class="seatTargetTag">🎯 Escolher</div>
     </div>
-    <div class="turnTimer">—</div>
-    <div class="turnBar"><i></i></div>
-    <div class="miniHand">
-      <div class="miniCard back" data-idx="0"><div class="cMark">C</div></div>
-      <div class="miniCard back" data-idx="1"><div class="cMark">C</div></div>
+
+    <div class="seatBadge hidden"></div>
+
+    <div class="seatTimer">
+      <span class="tText">—</span>
+      <span class="tBar"><i></i></span>
     </div>
-    <div class="seatTargetTag">🎯 Escolher</div>
   `;
 
   const refs = {
     root,
+    card: root.querySelector(".seatCard"),
     nick: root.querySelector(".nick"),
     coins: root.querySelector(".coins"),
     money: root.querySelector(".moneyTag"),
-    badge: root.querySelector(".respBadge"),
-    timer: root.querySelector(".turnTimer"),
-    bar: root.querySelector(".turnBar i"),
+    badge: root.querySelector(".seatBadge"),
+    timerWrap: root.querySelector(".seatTimer"),
+    timer: root.querySelector(".tText"),
+    bar: root.querySelector(".tBar i"),
     cards: [...root.querySelectorAll(".miniCard")],
   };
 
@@ -1040,7 +1133,7 @@ function updateMiniCard(el, card, showRole) {
 
   el.className = `miniCard ${roleToShow ? UI.roleClass(roleToShow) : "back"}${alive ? "" : " dead"}`;
   el.innerHTML = roleToShow
-    ? `<div class="cIcon">${UI.roleIcon(roleToShow)}</div><div class="label">${UI.escape(UI.rolePt(roleToShow))}</div>`
+    ? `${UI.roleArt(roleToShow)}<div class="label">${UI.escape(UI.rolePt(roleToShow))}</div>`
     : `<div class="cMark">C</div>`;
 }
 
@@ -1086,6 +1179,9 @@ function renderTable() {
 
     s.root.style.left = pos[i].x + "%";
     s.root.style.top = pos[i].y + "%";
+    // assentos da metade direita jogam o badge para o lado de dentro,
+    // senão ele sairia da mesa
+    s.root.classList.toggle("badgeLeft", pos[i].x > 50);
 
     const current = state.phase === "turn" && state.currentPlayerId === p.id;
     const dead = p.aliveCount <= 0;
@@ -1115,23 +1211,29 @@ function renderTable() {
     s.money.classList.toggle("rich", p.coins >= 10);
 
     const badge = seatResponseBadge(p);
+    const wasHidden = s.badge.classList.contains("hidden");
     s.badge.classList.toggle("hidden", !badge);
     if (badge) {
-      s.badge.textContent = badge.t;
-      s.badge.className = `respBadge ${badge.c}`;
+      if (s.badge.dataset.t !== badge.t) {
+        s.badge.dataset.t = badge.t;
+        s.badge.textContent = badge.t;
+      }
+      s.badge.className = `seatBadge ${badge.c}`;
+      if (wasHidden) FX.ping(s.badge, "badgeIn", 520);
+    } else {
+      s.badge.dataset.t = "";
     }
 
     if (current) {
       const left = UI.secsLeft(state.turnEndsAt);
       s.timer.textContent = `⏱ ${UI.timeLeft(state.turnEndsAt)}`;
-      s.timer.className = `turnTimer on ${left <= 10 ? "urgent" : ""}`;
+      s.timerWrap.className = `seatTimer on ${left <= 10 ? "urgent" : ""}`;
       s.bar.style.width =
         Math.max(0, Math.min(100, (left / (TURN_MS / 1000)) * 100)) + "%";
-      s.bar.parentElement.style.visibility = "visible";
     } else {
-      s.timer.textContent = dead ? "💀 eliminado" : "—";
-      s.timer.className = "turnTimer";
-      s.bar.parentElement.style.visibility = "hidden";
+      s.timer.textContent = dead ? "ELIMINADO" : "—";
+      s.timerWrap.className = "seatTimer";
+      s.bar.style.width = "0%";
     }
 
     const showMy = p.id === myId && !hideMyCards;
@@ -1195,7 +1297,7 @@ function renderLossModal() {
   for (const c of lf.aliveCards) {
     const card = document.createElement("div");
     card.className = `card ${UI.roleClass(c.role)} pickable`;
-    card.innerHTML = `<div class="cIcon big">${UI.roleIcon(c.role)}</div><div class="label">${UI.escape(UI.rolePt(c.role))}</div>`;
+    card.innerHTML = `${UI.roleArt(c.role)}<div class="label">${UI.escape(UI.rolePt(c.role))}</div>`;
     card.onclick = () => socket.emit("lose_influence", { cardIdx: c.idx });
     els.lossChoices.appendChild(card);
   }
@@ -1220,7 +1322,7 @@ function renderExchangeModal() {
   ex.options.forEach((role, idx) => {
     const card = document.createElement("div");
     card.className = `card ${UI.roleClass(role)} pickable`;
-    card.innerHTML = `<div class="cIcon big">${UI.roleIcon(role)}</div><div class="label">${UI.escape(UI.rolePt(role))}</div>`;
+    card.innerHTML = `${UI.roleArt(role)}<div class="label">${UI.escape(UI.rolePt(role))}</div>`;
 
     card.onclick = () => {
       const key = `${role}#${idx}`;
@@ -1271,7 +1373,8 @@ function renderAll() {
   renderTop();
 
   renderRoomPeople();
-  renderLobby();
+  renderQueue();
+  renderReadyButton();
   renderHostButtons();
 
   renderTurnHint();
@@ -1290,5 +1393,6 @@ function renderAll() {
 setInterval(() => {
   if (!state) return;
   renderTop();
+  renderRespTimer();
   if (state.started) renderTable();
 }, 250);

@@ -34,11 +34,11 @@
           <button id="readyBtn" class="btn">Ficar READY</button>
         </div>
 
-        <h2>Pessoas na sala</h2>
+        <h2>Pessoas na sala <span id="seatCount" class="hCount"></span></h2>
         <div id="roomPeople" class="lobby"></div>
 
-        <h2>Fila / Lobby</h2>
-        <div id="lobby" class="lobby"></div>
+        <h2>Fila de espera <span id="queueCount" class="hCount"></span></h2>
+        <div id="queue" class="lobby"></div>
 
         <h2>Log</h2>
         <div id="log" class="log"></div>
@@ -54,68 +54,32 @@
         </div>
 
         <div id="gameBox" class="gameBox hidden">
-          <div class="topActions">
-            <div id="reactionBox" class="responseBox hidden">
-              <div class="responseHeader">
-                <div>
-                  <div class="responseTitle">Responder à ação</div>
-                  <div id="pendingText" class="responseText"></div>
-                </div>
-                <div class="row">
-                  <button id="acceptBtn" class="btn ok">Aceitar</button>
-                  <button id="contestBtn" class="btn danger">Contestar</button>
-                  <button id="blockBtn" class="btn warn">Bloquear</button>
-                </div>
-              </div>
-
-              <div id="reactionHint" class="responseHint"></div>
-
-              <div
-                id="blockPickRow"
-                class="row hidden"
-                style="margin-top: 10px"
-              >
-                <button id="blockCaptainBtn" class="btn">
-                  ⚓ Bloquear como Capitão
-                </button>
-                <button id="blockAmbBtn" class="btn">
-                  🎭 Bloquear como Embaixador
-                </button>
-              </div>
-            </div>
-
-            <div id="blockChallengeBox" class="responseBox hidden">
-              <div class="responseHeader">
-                <div>
-                  <div class="responseTitle">Responder ao bloqueio</div>
-                  <div id="blockText" class="responseText"></div>
-                </div>
-                <div class="row">
-                  <button id="blockAcceptBtn" class="btn ok">
-                    Aceitar bloqueio
-                  </button>
-                  <button id="blockContestBtn" class="btn danger">
-                    Contestar bloqueio
-                  </button>
-                </div>
-              </div>
-              <div id="blockChallengeHint" class="responseHint"></div>
-            </div>
-          </div>
-
           <div class="tableArea" id="tableArea">
             <div class="tableFelt"></div>
 
             <div class="tableCenter" id="tableCenter">
-              <div class="deckStack" id="deckStack">
-                <div class="deckCard d3"></div>
-                <div class="deckCard d2"></div>
-                <div class="deckCard d1">
-                  <div class="deckMark">C</div>
+              <div class="centerRow">
+                <div class="deckStack" id="deckStack">
+                  <div class="deckCard d3"></div>
+                  <div class="deckCard d2"></div>
+                  <div class="deckCard d1">
+                    <div class="deckMark">C</div>
+                  </div>
+                </div>
+
+                <!-- banco: de onde saem e para onde voltam as moedas -->
+                <div class="bankPile" id="bankPile">
+                  <i class="bankCoin b5"></i>
+                  <i class="bankCoin b4"></i>
+                  <i class="bankCoin b3"></i>
+                  <i class="bankCoin b2"></i>
+                  <i class="bankCoin b1"></i>
                 </div>
               </div>
-              <div class="deckCount">
-                Baralho: <b id="deckCount">—</b>
+
+              <div class="centerLabels">
+                <span class="deckCount">Baralho <b id="deckCount">—</b></span>
+                <span class="bankLabel">Banco</span>
               </div>
             </div>
 
@@ -158,6 +122,53 @@
             <b>Bloqueios:</b> Duque bloqueia Ajuda Externa; Condessa bloqueia
             Assassinato; Capitão/Embaixador bloqueia Roubo.
           </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: responder à ação / ao bloqueio -->
+    <div id="responseModal" class="modal hidden">
+      <div class="modalCard responseCard">
+        <div class="respTimer" id="respTimer">⏱ —</div>
+
+        <div id="reactionBox" class="responseBlock hidden">
+          <h2 class="respHead">Responder à ação</h2>
+          <div id="pendingText" class="responseText"></div>
+
+          <div class="row respRow">
+            <button id="acceptBtn" class="btn ok big">✔ Aceitar</button>
+            <button id="contestBtn" class="btn danger big">
+              ❗ Contestar
+            </button>
+            <button id="blockBtn" class="btn warn big">🛡️ Bloquear</button>
+          </div>
+
+          <div id="blockPickRow" class="row respRow hidden">
+            <button id="blockCaptainBtn" class="btn">
+              ⚓ Bloquear como Capitão
+            </button>
+            <button id="blockAmbBtn" class="btn">
+              🎭 Bloquear como Embaixador
+            </button>
+          </div>
+
+          <div id="reactionHint" class="responseHint"></div>
+        </div>
+
+        <div id="blockChallengeBox" class="responseBlock hidden">
+          <h2 class="respHead">Responder ao bloqueio</h2>
+          <div id="blockText" class="responseText"></div>
+
+          <div class="row respRow">
+            <button id="blockAcceptBtn" class="btn ok big">
+              ✔ Aceitar bloqueio
+            </button>
+            <button id="blockContestBtn" class="btn danger big">
+              ❗ Contestar bloqueio
+            </button>
+          </div>
+
+          <div id="blockChallengeHint" class="responseHint"></div>
         </div>
       </div>
     </div>

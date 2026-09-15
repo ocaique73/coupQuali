@@ -7,6 +7,10 @@
     "(prefers-reduced-motion: reduce)",
   )?.matches;
 
+  // Multiplicador global de duração. 1.3 = 30% mais lento que o tempo base
+  // escrito nas chamadas e no CSS. Mexa só aqui para acelerar/desacelerar tudo.
+  const SPEED = 1.3;
+
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   let layer = null;
@@ -48,6 +52,8 @@
         easing: "cubic-bezier(.22,.9,.28,1)",
         fill: "forwards",
         ...options,
+        duration: (options?.duration ?? 400) * SPEED,
+        delay: (options?.delay ?? 0) * SPEED,
       });
       anim.onfinish = () => {
         el.remove();
@@ -68,7 +74,7 @@
     _running: false,
 
     enqueue(fn, dur = 400) {
-      this._q.push({ fn, dur });
+      this._q.push({ fn, dur: dur * SPEED });
       this._pump();
     },
 
@@ -151,8 +157,7 @@
       const cls = faceDown ? "back" : UI.roleClass(role);
       const label = faceDown
         ? `<div class="fxCardMark">C</div>`
-        : `<div class="fxCardIcon">${UI.roleIcon(role)}</div>
-           <div class="fxCardName">${UI.escape(UI.rolePt(role))}</div>`;
+        : UI.roleArt(role);
 
       return this.fly({
         from,
@@ -175,7 +180,7 @@
             from,
             to,
             cls: "fxCoin",
-            html: "🪙",
+            html: "",
             dur,
             delay: delay + i * 70,
             arc: 40 + i * 12,
@@ -213,11 +218,7 @@
       if (!at) return Promise.resolve();
       const c = centerOf(at);
       const el = spawn(
-        `<div class="fxRevealInner">
-           <div class="fxCardIcon">${UI.roleIcon(role)}</div>
-           <div class="fxCardName">${UI.escape(UI.rolePt(role))}</div>
-           <div class="fxRevealTag">REVELADA</div>
-         </div>`,
+        `${UI.roleArt(role)}<div class="fxRevealTag">REVELADA</div>`,
         `fxCard fxReveal ${UI.roleClass(role)}`,
         { left: `${c.x}px`, top: `${c.y}px` },
       );
@@ -278,7 +279,11 @@
           { transform: "translateY(0) scale(1)", opacity: 1, offset: 0.78 },
           { transform: "translateY(-14px) scale(.96)", opacity: 0 },
         ],
-        { duration: dur, easing: "cubic-bezier(.22,.9,.28,1)", fill: "both" },
+        {
+          duration: dur * SPEED,
+          easing: "cubic-bezier(.22,.9,.28,1)",
+          fill: "both",
+        },
       );
       return new Promise((res) => {
         anim.onfinish = () => {
@@ -288,14 +293,19 @@
       });
     },
 
-    // aplica uma classe de animação e remove depois
+    // aplica uma classe de animação e remove depois.
+    // O inline animationDuration faz as keyframes do CSS respeitarem o SPEED.
     ping(el, cls, dur = 700) {
       if (!el) return;
       el.classList.remove(cls);
       // força reflow para poder repetir a mesma animação
       void el.offsetWidth;
+      el.style.animationDuration = `${dur * SPEED}ms`;
       el.classList.add(cls);
-      setTimeout(() => el.classList.remove(cls), dur);
+      setTimeout(() => {
+        el.classList.remove(cls);
+        el.style.animationDuration = "";
+      }, dur * SPEED);
     },
 
     shake(el) {

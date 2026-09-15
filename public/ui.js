@@ -77,6 +77,22 @@ window.UI = {
     return ROLE_META[role]?.icon || "🂠";
   },
 
+  // arte da carta (public/img/<cls>.webp)
+  roleImg(role) {
+    const cls = ROLE_META[role]?.cls;
+    return cls ? `/img/${cls}.webp` : null;
+  },
+
+  // <img> da carta, com o emoji como fallback se a arte não carregar
+  roleArt(role, extraCls) {
+    const src = this.roleImg(role);
+    if (!src) return `<span class="cIcon">${this.roleIcon(role)}</span>`;
+    return `<img class="cArt ${extraCls || ""}" src="${src}" alt="${this.escape(
+      this.rolePt(role),
+    )}" draggable="false"
+      onerror="this.outerHTML='<span class=\\'cIcon\\'>${this.roleIcon(role)}</span>'" />`;
+  },
+
   actionLabel(type) {
     return ACTION_LABELS[type] || (type || "").toUpperCase();
   },

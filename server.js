@@ -108,8 +108,19 @@ function findPlayer(room, id) {
 function connectedPlayers(room) {
   return room.players.filter((p) => p.connected);
 }
+
+// "Sala" e "fila" sao conjuntos DISJUNTOS: quem esta sentado ocupa uma das 6
+// cadeiras; quem chegou com a sala cheia (ou com a partida em andamento) fica
+// na fila ate o host puxar.
+const MAX_SEATS = 6;
+function seatedPlayers(room) {
+  return room.players.filter((p) => p.connected && p.seated);
+}
+function queuedPlayers(room) {
+  return room.players.filter((p) => p.connected && !p.seated);
+}
 function lobbyPlayers(room) {
-  return room.players.filter((p) => p.connected && !p.inGame);
+  return room.players.filter((p) => p.connected && p.seated && !p.inGame);
 }
 function inGamePlayers(room) {
   return room.players.filter((p) => p.connected && p.inGame);
@@ -123,8 +134,10 @@ function aliveCount(p) {
 }
 
 function electHost(room) {
-  const conn = connectedPlayers(room);
-  room.hostId = conn.length ? conn[0].id : null;
+  // prefere alguem sentado; so cai para a fila se a sala estiver vazia
+  const seated = seatedPlayers(room);
+  const pool = seated.length ? seated : connectedPlayers(room);
+  room.hostId = pool.length ? pool[0].id : null;
 }
 
 function removeRoomIfEmpty(room) {
@@ -206,12 +219,19 @@ function roomPublicState(room, viewerId) {
   const blockResponded =
     room.phase === "block_challenge" ? room.blockChallenges : {};
 
-  // lista completa (isso resolve seu painel esquerdo “pessoas na sala”)
-  const roomPlayers = connectedPlayers(room).map((p) => ({
+  // sala = so quem esta sentado (nunca quem esta na fila)
+  const roomPlayers = seatedPlayers(room).map((p) => ({
     id: p.id,
     nick: p.nick,
     ready: !!p.ready,
     inGame: !!p.inGame,
+    isHost: p.id === room.hostId,
+  }));
+
+  // fila = quem chegou com a sala cheia ou com a partida rolando
+  const queue = queuedPlayers(room).map((p) => ({
+    id: p.id,
+    nick: p.nick,
     isHost: p.id === room.hostId,
   }));
 
@@ -221,7 +241,11 @@ function roomPublicState(room, viewerId) {
     started: room.started,
     phase: room.phase,
 
-    roomPlayers, // <<< NOVO
+    roomPlayers,
+    queue,
+    seatsFree: Math.max(0, MAX_SEATS - seatedPlayers(room).length),
+    maxSeats: MAX_SEATS,
+
     lobby: lobbyPlayers(room).map((p) => ({
       id: p.id,
       nick: p.nick,
@@ -318,15 +342,17 @@ function endToLobby(room, reason) {
 }
 
 function startGame(room) {
-  const lobby = lobbyPlayers(room);
+  const seated = seatedPlayers(room);
 
-  if (lobby.length < 2)
-    return { ok: false, msg: "Precisa de pelo menos 2 jogadores." };
-  if (lobby.length > 6) return { ok: false, msg: "Máximo 6 jogadores." };
-  if (!lobby.every((p) => p.ready))
-    return { ok: false, msg: "Todos precisam estar READY." };
+  if (seated.length < 2)
+    return { ok: false, msg: "Precisa de pelo menos 2 jogadores na sala." };
+  if (seated.length > MAX_SEATS)
+    return { ok: false, msg: `Máximo ${MAX_SEATS} jogadores.` };
+  if (!seated.every((p) => p.ready))
+    return { ok: false, msg: "Todos na sala precisam estar READY." };
 
-  for (const p of room.players) p.inGame = p.connected && p.ready;
+  for (const p of room.players)
+    p.inGame = p.connected && p.seated && p.ready;
 
   room.started = true;
   room.winner = null;
@@ -877,25 +903,37 @@ io.on("connection", (socket) => {
 
     let p = findPlayer(room, socket.id);
     if (!p) {
+      // senta se houver cadeira livre E a partida nao tiver comecado;
+      // caso contrario vai para a fila e espera o host puxar
+      const canSit =
+        !room.started && seatedPlayers(room).length < MAX_SEATS;
+
       p = {
         id: socket.id,
         nick: cleanNick,
         connected: true,
+        seated: canSit,
         ready: false,
         inGame: false,
         coins: 2,
         hand: [],
       };
       room.players.push(p);
+      addLog(
+        room,
+        canSit
+          ? `${cleanNick} entrou na sala.`
+          : `${cleanNick} entrou na FILA (${room.started ? "partida em andamento" : "sala cheia"}).`,
+      );
     } else {
       p.nick = cleanNick;
       p.connected = true;
+      addLog(room, `${cleanNick} voltou.`);
     }
 
     if (!room.hostId) room.hostId = socket.id;
 
     socket.join(key);
-    addLog(room, `${cleanNick} entrou na sala.`);
     broadcast(room);
   });
 
@@ -905,8 +943,9 @@ io.on("connection", (socket) => {
     const p = findPlayer(room, socket.id);
     if (!p || !p.connected) return;
 
-    // não mexe ready durante jogo
+    // não mexe ready durante jogo, e quem está na fila não fica READY
     if (room.started) return;
+    if (!p.seated) return;
 
     p.ready = !p.ready;
     addLog(room, `${p.nick} está ${p.ready ? "READY" : "NOT READY"}.`);
@@ -921,6 +960,39 @@ io.on("connection", (socket) => {
 
     const res = startGame(room);
     if (!res.ok) addLog(room, res.msg);
+    broadcast(room);
+  });
+
+  // host puxa alguem da fila para uma cadeira livre
+  socket.on("promote", ({ playerId }) => {
+    if (!joinedRoomKey) return;
+    const room = getRoom(joinedRoomKey);
+    if (socket.id !== room.hostId) return;
+    if (room.started) return;
+    if (seatedPlayers(room).length >= MAX_SEATS) return;
+
+    const p = findPlayer(room, playerId);
+    if (!p || !p.connected || p.seated) return;
+
+    p.seated = true;
+    p.ready = false;
+    addLog(room, `${p.nick} foi puxado da fila para a sala.`);
+    broadcast(room);
+  });
+
+  // host manda alguem da sala de volta para a fila
+  socket.on("demote", ({ playerId }) => {
+    if (!joinedRoomKey) return;
+    const room = getRoom(joinedRoomKey);
+    if (socket.id !== room.hostId) return;
+    if (room.started) return;
+
+    const p = findPlayer(room, playerId);
+    if (!p || !p.connected || !p.seated) return;
+
+    p.seated = false;
+    p.ready = false;
+    addLog(room, `${p.nick} voltou para a fila.`);
     broadcast(room);
   });
 
