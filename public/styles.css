@@ -2902,3 +2902,31 @@ body[data-theme="qualitas"] .themeBtn {
 body[data-theme="qualitas"] .profileCard input {
   background: #140b1c;
 }
+
+/* =====================================================================
+   v6 — área da mesa 3D
+   ===================================================================== */
+.table3d {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  background: #07070a;
+}
+.three3dHost {
+  position: absolute;
+  inset: 0;
+}
+.three3dHost canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+.three3dMsg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+}

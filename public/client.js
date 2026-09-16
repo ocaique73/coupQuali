@@ -274,6 +274,8 @@ socket.on("state", (s) => {
   // o tema decide de qual pasta vêm as artes: tem de valer antes do render
   applyTheme(s.theme);
   renderAll();
+  // a cena 3D recebe o MESMO estado; muda só o desenho
+  window.COUP3D?.onState(s, myId);
   // depois do render: os retângulos usados pelas animações já estão corretos
   consumeEvents(s.events, prev);
 });
@@ -674,6 +676,7 @@ const EMOTE_TEXT = {
 };
 
 function playEmote(ev) {
+  window.COUP3D?.onEmote(ev);
   // a mensagem não depende de medir o card: vem primeiro, para nunca se
   // perder caso o assento ainda não tenha layout
   const txt = EMOTE_TEXT[ev.kind];

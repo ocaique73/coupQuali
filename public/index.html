@@ -43,6 +43,14 @@
           </div>
         </div>
 
+        <div class="prefsRow">
+          <div class="themeRow">
+            <span class="themeLbl">Visual</span>
+            <div id="modePicker" class="themePicker"></div>
+          </div>
+          <span id="modeHint" class="fieldHint" style="margin: 0"></span>
+        </div>
+
         <h2>Pessoas na sala <span id="seatCount" class="hCount"></span></h2>
         <div id="roomPeople" class="lobby"></div>
 
@@ -97,6 +105,12 @@
         </div>
 
         <div id="gameBox" class="gameBox hidden">
+          <!-- mesa 3D (Three.js). Ocupa o mesmo espaço da mesa 2D. -->
+          <div class="tableArea table3d hidden" id="tableArea3d">
+            <div id="three3dHost" class="three3dHost"></div>
+            <div id="three3dMsg" class="three3dMsg">Carregando 3D...</div>
+          </div>
+
           <div class="tableArea" id="tableArea">
             <div class="tableFelt"></div>
 
@@ -303,9 +317,19 @@
     <!-- camada de animações -->
     <div id="fxLayer" class="fxLayer"></div>
 
+    <!-- o Three.js só é baixado se o jogador escolher o modo 3D -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+        }
+      }
+    </script>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="/ui.js"></script>
     <script src="/fx.js"></script>
     <script src="/client.js"></script>
+    <script src="/mode3d.js"></script>
   </body>
 </html>
