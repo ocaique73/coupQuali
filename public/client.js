@@ -21,6 +21,18 @@ const els = {
   restartBtn: document.getElementById("restartBtn"),
   readyBtn: document.getElementById("readyBtn"),
 
+  editProfileBtn: document.getElementById("editProfileBtn"),
+  themePicker: document.getElementById("themePicker"),
+  themeRow: document.getElementById("themeRow"),
+
+  profileModal: document.getElementById("profileModal"),
+  pfNick: document.getElementById("pfNick"),
+  pfAvatar: document.getElementById("pfAvatar"),
+  pfPreview: document.getElementById("pfPreview"),
+  pfHint: document.getElementById("pfHint"),
+  pfSave: document.getElementById("pfSave"),
+  pfCancel: document.getElementById("pfCancel"),
+
   pauseOverlay: document.getElementById("pauseOverlay"),
   pauseBy: document.getElementById("pauseBy"),
   pauseClock: document.getElementById("pauseClock"),
@@ -259,6 +271,8 @@ socket.on("me", ({ pid }) => {
 socket.on("state", (s) => {
   const prev = state;
   state = s;
+  // o tema decide de qual pasta vêm as artes: tem de valer antes do render
+  applyTheme(s.theme);
   renderAll();
   // depois do render: os retângulos usados pelas animações já estão corretos
   consumeEvents(s.events, prev);
@@ -755,6 +769,108 @@ refreshAvatarPreview();
 els.pauseBtn.onclick = () => socket.emit("pause");
 els.resumeBtn.onclick = () => socket.emit("resume");
 
+/* ---------------- perfil (nick + foto) ---------------- */
+
+function pfRefreshPreview() {
+  const url = (els.pfAvatar.value || "").trim();
+  const ok = /^https?:\/\//i.test(url);
+  els.pfPreview.innerHTML = ok
+    ? `<img src="${UI.escape(url)}" alt="" onerror="this.parentElement.innerHTML='<span>❌</span>'" />`
+    : `<span>👤</span>`;
+  els.pfHint.textContent = url
+    ? ok
+      ? "Se a imagem não aparecer aqui, o link não serve."
+      : "Precisa começar com http:// ou https://"
+    : "Opcional. Aparece no seu card na mesa.";
+}
+
+function openProfile() {
+  if (state?.started) return; // trava durante a partida
+  els.pfNick.value = myNick;
+  els.pfAvatar.value = myAvatar;
+  pfRefreshPreview();
+  els.profileModal.classList.remove("hidden");
+  els.pfNick.focus();
+}
+
+function closeProfile() {
+  els.profileModal.classList.add("hidden");
+}
+
+els.editProfileBtn.onclick = openProfile;
+els.pfCancel.onclick = closeProfile;
+els.pfAvatar.oninput = pfRefreshPreview;
+
+els.pfSave.onclick = () => {
+  const nick = (els.pfNick.value || "").trim().slice(0, 20);
+  if (!nick) return alert("Digite um nick.");
+
+  const avatar = (els.pfAvatar.value || "").trim();
+  if (avatar && !/^https?:\/\//i.test(avatar))
+    return alert("O link da foto precisa começar com http:// ou https://");
+
+  myNick = nick;
+  myAvatar = avatar;
+  store(localStorage, "coup.nick", myNick);
+  store(localStorage, "coup.avatar", myAvatar);
+
+  socket.emit("profile", { nick: myNick, avatar: myAvatar || null });
+  closeProfile();
+};
+
+els.pfNick.onkeydown = els.pfAvatar.onkeydown = (e) => {
+  if (e.key === "Enter") els.pfSave.click();
+};
+
+/* ---------------- tema ---------------- */
+
+const THEME_META = {
+  politica: { label: "Política", dot: "#2dd36f" },
+  qualitas: { label: "Qualitas", dot: "#ff8a00" },
+};
+
+function applyTheme(theme) {
+  const t = THEME_META[theme] ? theme : "politica";
+
+  // marca sempre: no primeiro estado o tema já é o padrão e, sem isso,
+  // o body ficaria sem data-theme nenhum
+  document.body.dataset.theme = t;
+
+  if (UI.theme === t) return;
+  UI.theme = t;
+
+  // as artes já renderizadas apontam para a pasta do tema antigo:
+  // força o redesenho de tudo que usa imagem de carta
+  for (const [, s] of seatEls) s.cards.forEach((c) => (c.dataset.sig = ""));
+  els.roleGuide.dataset.done = "";
+  els.roleGuide.innerHTML = "";
+  els.discard.dataset.n = "";
+}
+
+function renderThemePicker() {
+  const themes = state?.themes || ["politica", "qualitas"];
+  const cur = state?.theme || "politica";
+  const isHost = state?.hostId === myId;
+
+  const sig = `${themes.join(",")}|${cur}|${isHost}`;
+  if (els.themePicker.dataset.sig === sig) return;
+  els.themePicker.dataset.sig = sig;
+
+  els.themePicker.innerHTML = "";
+  for (const t of themes) {
+    const meta = THEME_META[t] || { label: t, dot: "#888" };
+    const b = document.createElement("button");
+    b.className = `themeBtn ${t === cur ? "on" : ""}`;
+    b.innerHTML = `<i style="background:${meta.dot}"></i>${UI.escape(meta.label)}`;
+    b.disabled = !isHost;
+    b.title = isHost
+      ? `Usar o tema ${meta.label}`
+      : "Só o host troca o tema da sala";
+    b.onclick = () => socket.emit("theme", { theme: t });
+    els.themePicker.appendChild(b);
+  }
+}
+
 /* ---------------- chat ---------------- */
 
 function sendChat() {
@@ -1100,6 +1216,18 @@ function renderQueue() {
 
     els.queue.appendChild(row);
   }
+}
+
+function renderProfileButton() {
+  const playing = !!state?.started;
+  els.editProfileBtn.disabled = playing;
+  els.editProfileBtn.title = playing
+    ? "Não dá para trocar nick ou foto durante a partida"
+    : "Trocar seu nick e sua foto";
+
+  // se a partida começar com o modal aberto, fecha
+  if (playing && !els.profileModal.classList.contains("hidden"))
+    closeProfile();
 }
 
 function renderReadyButton() {
@@ -1799,6 +1927,8 @@ function renderAll() {
   renderReadyButton();
   renderHostButtons();
 
+  renderProfileButton();
+  renderThemePicker();
   renderTurnHint();
   renderQuickChat();
   renderActions();

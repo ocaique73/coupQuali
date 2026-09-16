@@ -77,10 +77,13 @@ window.UI = {
     return ROLE_META[role]?.icon || "🂠";
   },
 
-  // arte da carta (public/img/<cls>.webp)
+  // tema atual — o client atualiza quando o estado chega
+  theme: "politica",
+
+  // arte da carta: cada tema tem sua pasta em public/img/<tema>/
   roleImg(role) {
     const cls = ROLE_META[role]?.cls;
-    return cls ? `/img/${cls}.webp` : null;
+    return cls ? `/img/${this.theme}/${cls}.webp` : null;
   },
 
   // <img> da carta, com o emoji como fallback se a arte não carregar

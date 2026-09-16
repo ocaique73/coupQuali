@@ -2750,3 +2750,155 @@ h2 {
     grid-template-columns: repeat(5, 1fr);
   }
 }
+
+/* =====================================================================
+   v5 — temas (Política / Qualitas), edição de perfil e seletor de tema.
+   ===================================================================== */
+
+/* o brilho da mesa virou variável para o tema poder trocá-lo */
+:root {
+  --tableGlow: rgba(30, 110, 60, 0.35);
+}
+.tableArea {
+  background: radial-gradient(
+    ellipse at 50% 45%,
+    var(--tableGlow),
+    rgba(0, 0, 0, 0.25) 70%
+  );
+}
+
+/* ---------- tema Qualitas: mesa laranja + roxo escuro ---------- */
+body[data-theme="qualitas"] {
+  --bg: #150c1e;
+  --panel: #1f1430;
+  --border: #3d2a58;
+  --muted: #b9a6cf;
+  --text: #f1e9ff;
+
+  --table: #8a3f08;
+  --table2: #4a1f04;
+  --tableGlow: rgba(210, 105, 20, 0.36);
+}
+body[data-theme="qualitas"] .topbar {
+  background: #1a1029;
+}
+body[data-theme="qualitas"] .btn,
+body[data-theme="qualitas"] .actionBtn,
+body[data-theme="qualitas"] .lobby,
+body[data-theme="qualitas"] .log,
+body[data-theme="qualitas"] .discard,
+body[data-theme="qualitas"] .chatBox,
+body[data-theme="qualitas"] .turnHint,
+body[data-theme="qualitas"] .guideRow,
+body[data-theme="qualitas"] .joinBox,
+body[data-theme="qualitas"] .modalCard,
+body[data-theme="qualitas"] .chatRow input,
+body[data-theme="qualitas"] .joinBox input,
+body[data-theme="qualitas"] .qBtn {
+  background: #1a1029;
+}
+body[data-theme="qualitas"] .btn.primary {
+  background: linear-gradient(180deg, #45205e, #1a1029);
+  border-color: #8b5cf6;
+}
+body[data-theme="qualitas"] .brand {
+  background: linear-gradient(90deg, #ff9d3a, #ffd400);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+body[data-theme="qualitas"] .tablePanel {
+  border-color: #5a2a06;
+}
+body[data-theme="qualitas"] .tableFelt {
+  border-color: rgba(255, 190, 120, 0.12);
+}
+
+/* ---------- linha de preferências (perfil + tema) ---------- */
+.prefsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.themeRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.themeLbl {
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.themePicker {
+  display: flex;
+  gap: 5px;
+}
+.themeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #0c121b;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+body[data-theme="qualitas"] .themeBtn {
+  background: #1a1029;
+}
+.themeBtn i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: block;
+}
+.themeBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  color: var(--text);
+}
+.themeBtn.on {
+  border-color: var(--yellow);
+  color: var(--text);
+  box-shadow: 0 0 0 1px rgba(255, 212, 0, 0.25) inset;
+}
+.themeBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ---------- modal de perfil ---------- */
+.profileCard {
+  width: min(520px, 100%);
+}
+.profileCard h2 {
+  margin-top: 0;
+  font-size: 15px;
+  color: var(--text);
+  letter-spacing: 0.5px;
+  text-transform: none;
+}
+.profileCard input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #0b0f14;
+  color: var(--text);
+  margin: 8px 0 0;
+}
+body[data-theme="qualitas"] .profileCard input {
+  background: #140b1c;
+}

@@ -33,6 +33,10 @@ const ROLES = ["Duke", "Assassin", "Captain", "Ambassador", "Contessa"];
 // cada jogador ganha uma cor própria (contorno do card na mesa)
 const PLAYER_COLORS = 6;
 
+// temas: trocam a arte das cartas e as cores da mesa/painéis
+const THEMES = ["politica", "qualitas"];
+const DEFAULT_THEME = "politica";
+
 // chat
 const CHAT_MAX = 150;
 const CHAT_MIN_MS = 1200; // anti-spam
@@ -139,6 +143,7 @@ function getRoom(key) {
 
       paused: null, // { at, byNick, untilAt }
       emptySince: 0,
+      theme: DEFAULT_THEME,
     });
   }
   return rooms.get(key);
@@ -389,6 +394,9 @@ function roomPublicState(room, viewerId) {
     paused: room.paused
       ? { byNick: room.paused.byNick, untilAt: room.paused.untilAt }
       : null,
+
+    theme: room.theme || DEFAULT_THEME,
+    themes: THEMES,
   };
 }
 
@@ -1164,6 +1172,44 @@ io.on("connection", (socket) => {
     p.seated = false;
     p.ready = false;
     addLog(room, `${p.nick} voltou para a fila.`);
+    broadcast(room);
+  });
+
+  // trocar nick/foto — só fora de partida
+  socket.on("profile", ({ nick, avatar }) => {
+    if (!joinedRoomKey) return;
+    const room = getRoom(joinedRoomKey);
+    if (room.started) return; // nada de trocar de identidade no meio do jogo
+
+    const p = findPlayer(room, myPid);
+    if (!p || !p.connected) return;
+
+    const cleanNick = (nick ?? "").toString().trim().slice(0, 20);
+    const before = p.nick;
+
+    if (cleanNick) p.nick = cleanNick;
+    p.avatar = safeAvatarUrl(avatar);
+
+    addLog(
+      room,
+      before !== p.nick
+        ? `${before} agora é ${p.nick}.`
+        : `${p.nick} trocou a foto.`,
+    );
+    broadcast(room);
+  });
+
+  // tema da sala (arte das cartas + cores) — só o host
+  socket.on("theme", ({ theme }) => {
+    if (!joinedRoomKey) return;
+    const room = getRoom(joinedRoomKey);
+    if (myPid !== room.hostId) return;
+    if (!THEMES.includes(theme)) return;
+    if (room.theme === theme) return;
+
+    room.theme = theme;
+    pushEvent(room, "theme", { theme });
+    addLog(room, `🎨 Tema da sala: ${theme}.`);
     broadcast(room);
   });
 

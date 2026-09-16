@@ -35,6 +35,14 @@
           <button id="readyBtn" class="btn">Ficar READY</button>
         </div>
 
+        <div class="prefsRow">
+          <button id="editProfileBtn" class="btn small">✏️ Meu perfil</button>
+          <div id="themeRow" class="themeRow">
+            <span class="themeLbl">Tema</span>
+            <div id="themePicker" class="themePicker"></div>
+          </div>
+        </div>
+
         <h2>Pessoas na sala <span id="seatCount" class="hCount"></span></h2>
         <div id="roomPeople" class="lobby"></div>
 
@@ -209,6 +217,34 @@
           </div>
 
           <div id="blockChallengeHint" class="responseHint"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: editar nick e foto (só fora de partida) -->
+    <div id="profileModal" class="modal hidden">
+      <div class="modalCard profileCard">
+        <h2>Meu perfil</h2>
+
+        <label class="fieldLabel" for="pfNick">Nick (máx 20)</label>
+        <input id="pfNick" maxlength="20" placeholder="Seu nick..." />
+
+        <label class="fieldLabel" for="pfAvatar">
+          Foto (opcional) — link de uma imagem
+        </label>
+        <div class="avatarRow">
+          <input
+            id="pfAvatar"
+            maxlength="500"
+            placeholder="https://.../sua-foto.jpg"
+          />
+          <div class="avatarPreview" id="pfPreview"><span>👤</span></div>
+        </div>
+        <div class="fieldHint" id="pfHint"></div>
+
+        <div class="row" style="margin-top: 12px">
+          <button id="pfSave" class="btn primary">Salvar</button>
+          <button id="pfCancel" class="btn">Cancelar</button>
         </div>
       </div>
     </div>
