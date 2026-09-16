@@ -67,13 +67,20 @@ function endToLobby(room, reason) {
   room.deck = [];
   room.discard = [];
 
+  // Reseta TODO mundo, inclusive quem está offline. Antes havia um
+  // `if (!p.connected) continue` aqui: quem tinha caído durante a partida
+  // ficava com inGame = true para sempre, aparecia na mesa depois do fim,
+  // segurava uma cadeira e ainda surgia para quem entrasse na sala depois.
   for (const p of room.players) {
-    if (!p.connected) continue;
     p.inGame = false;
     p.ready = false;
     p.coins = 2;
     p.hand = [];
   }
+
+  // Acabada a partida, quem está desconectado não tem mais nada a preservar
+  // (mão, moedas e vez já foram zeradas): sai da sala e libera a cadeira.
+  room.players = room.players.filter((p) => p.connected);
 
   if (reason) addLog(room, reason);
 }
