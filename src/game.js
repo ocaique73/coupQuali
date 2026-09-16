@@ -111,7 +111,9 @@ function startGame(room) {
     ];
   }
 
-  room.turnIndex = 0;
+  // Quem começa é SORTEADO. Com turnIndex fixo em 0 o host saía sempre na
+  // frente, o que dá vantagem e cansa.
+  room.turnIndex = Math.floor(Math.random() * inGamePlayers(room).length);
   room.turnEndsAt = now() + TURN_MS;
 
   pushEvent(room, "game_start", {

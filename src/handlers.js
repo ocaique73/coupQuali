@@ -2,13 +2,14 @@
 // game.js e faz o broadcast.
 const { now, cleanPid, randomPid, safeAvatarUrl, roomKeyFromPath } = require("./util");
 const {
-  MAX_SEATS, THEMES, RESPONSE_MS,
+  MAX_SEATS, RESPONSE_MS, PLAYER_COLORS,
+  SHIRTS, BODIES, SKINS, PROPS,
   CHAT_MAX, CHAT_MIN_MS, EMOTE_MIN_MS, EMOTES,
 } = require("./constants");
 const {
   getRoom, addLog, pushEvent, findPlayer,
   seatedPlayers, inGamePlayers, isAlive, assignColor, electHost, ensureHost,
-  removeRoomIfEmpty,
+  removeRoomIfEmpty, defaultAppearance, colorFree,
 } = require("./rooms");
 const { actionRequiresClaim, claimRoleForAction, actionBlockInfo } = require("./rules");
 const { broadcast } = require("./net");
@@ -58,6 +59,7 @@ function register(io) {
         };
         room.players.push(p);
         if (canSit) assignColor(room, p);
+        p.look = defaultAppearance(p.color ?? 0);
         addLog(
           room,
           canSit
@@ -182,40 +184,54 @@ function register(io) {
     });
   
     // trocar nick/foto — só fora de partida
-    socket.on("profile", ({ nick, avatar }) => {
+    // Nick, foto e visual. Só fora de partida — ninguém troca de identidade
+    // no meio do jogo.
+    socket.on("profile", ({ nick, avatar, look, color }) => {
       if (!joinedRoomKey) return;
       const room = getRoom(joinedRoomKey);
-      if (room.started) return; // nada de trocar de identidade no meio do jogo
-  
+      if (room.started) return;
+
       const p = findPlayer(room, myPid);
       if (!p || !p.connected) return;
-  
+
       const cleanNick = (nick ?? "").toString().trim().slice(0, 20);
       const before = p.nick;
-  
+
       if (cleanNick) p.nick = cleanNick;
       p.avatar = safeAvatarUrl(avatar);
-  
+
+      // aparência: só valores das listas; o resto é ignorado
+      if (look && typeof look === "object") {
+        const cur = p.look || defaultAppearance(p.color ?? 0);
+        p.look = {
+          shirt: SHIRTS.includes(look.shirt) ? look.shirt : cur.shirt,
+          body: BODIES.includes(look.body) ? look.body : cur.body,
+          skin:
+            Number.isInteger(look.skin) && look.skin >= 0 && look.skin < SKINS
+              ? look.skin
+              : cur.skin,
+          prop: PROPS.includes(look.prop) ? look.prop : cur.prop,
+        };
+      }
+
+      // A cor é EXCLUSIVA na sala: se outro já usa, mantém a atual e avisa.
+      let corNegada = false;
+      if (Number.isInteger(color) && color >= 0 && color < PLAYER_COLORS) {
+        if (color !== p.color) {
+          if (colorFree(room, p, color)) p.color = color;
+          else corNegada = true;
+        }
+      }
+
       addLog(
         room,
         before !== p.nick
           ? `${before} agora é ${p.nick}.`
-          : `${p.nick} trocou a foto.`,
+          : `${p.nick} mudou o visual.`,
       );
-      broadcast(room);
-    });
-  
-    // tema da sala (arte das cartas + cores) — só o host
-    socket.on("theme", ({ theme }) => {
-      if (!joinedRoomKey) return;
-      const room = getRoom(joinedRoomKey);
-      if (myPid !== room.hostId) return;
-      if (!THEMES.includes(theme)) return;
-      if (room.theme === theme) return;
-  
-      room.theme = theme;
-      pushEvent(room, "theme", { theme });
-      addLog(room, `🎨 Tema da sala: ${theme}.`);
+      if (corNegada)
+        socket.emit("toast", { text: "Essa cor já é de outro jogador." });
+
       broadcast(room);
     });
   

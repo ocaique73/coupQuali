@@ -2930,3 +2930,152 @@ body[data-theme="qualitas"] .profileCard input {
   font-size: 13px;
   pointer-events: none;
 }
+
+/* =====================================================================
+   v7 — chat horizontal, câmera 3D e editor de personagem
+   ===================================================================== */
+
+/* O balão ficava estreito e o texto quebrava quase letra a letra.
+   Agora é largo e só quebra quando precisa mesmo. */
+.seatChat {
+  max-width: none;
+  width: max-content;
+  min-width: 90px;
+  max-width: 320px;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+  line-height: 1.4;
+}
+
+/* ---------- editor de personagem ---------- */
+.pfSub {
+  margin: 16px 0 8px;
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  color: var(--muted);
+}
+.pfLook {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.pfPreview {
+  position: relative;
+  width: 190px;
+  height: 240px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: radial-gradient(circle at 50% 35%, #223049, #0b0f14 70%);
+  overflow: hidden;
+}
+body[data-theme="qualitas"] .pfPreview {
+  background: radial-gradient(circle at 50% 35%, #33204a, #140b1c 70%);
+}
+.pfPreview canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+.pfPreviewMsg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.pfOpts {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.pfOpt {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.pfOptLbl {
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pfPick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.lookBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #0b0f14;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+body[data-theme="qualitas"] .lookBtn {
+  background: #140b1c;
+}
+.lookBtn i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.lookBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  color: var(--text);
+}
+.lookBtn.on {
+  border-color: var(--yellow);
+  color: var(--text);
+  box-shadow: 0 0 0 1px rgba(255, 212, 0, 0.3) inset;
+}
+/* cor já usada por outro jogador */
+.lookBtn.taken {
+  opacity: 0.35;
+  cursor: not-allowed;
+  position: relative;
+}
+.lookBtn.taken::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  height: 2px;
+  background: var(--red);
+  transform: rotate(-18deg);
+}
+
+@media (max-width: 1200px) {
+  .pfLook {
+    flex-direction: column;
+  }
+  .pfPreview {
+    width: 100%;
+    height: 200px;
+  }
+}
+
+/* O aviso central precisa aparecer nos DOIS visuais, então se ancora no
+   gameBox e não na mesa 2D (que fica escondida no modo 3D). */
+.gameBox {
+  position: relative;
+}

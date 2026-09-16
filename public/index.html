@@ -51,6 +51,13 @@
           <span id="modeHint" class="fieldHint" style="margin: 0"></span>
         </div>
 
+        <div class="prefsRow hidden" id="camRow">
+          <div class="themeRow">
+            <span class="themeLbl">Câmera</span>
+            <div id="camPicker" class="themePicker"></div>
+          </div>
+        </div>
+
         <h2>Pessoas na sala <span id="seatCount" class="hCount"></span></h2>
         <div id="roomPeople" class="lobby"></div>
 
@@ -146,9 +153,11 @@
             </div>
 
             <div id="tableSeats" class="tableSeats"></div>
-
-            <div id="centerBanner" class="centerBanner"></div>
           </div>
+
+          <!-- Avisos do centro da mesa. Ficam FORA da mesa 2D de propósito:
+               dentro dela, sumiam junto quando o jogador trocava para o 3D. -->
+          <div id="centerBanner" class="centerBanner"></div>
         </div>
       </div>
 
@@ -256,6 +265,36 @@
         </div>
         <div class="fieldHint" id="pfHint"></div>
 
+        <h2 class="pfSub">Seu personagem</h2>
+        <div class="pfLook">
+          <div class="pfPreview" id="pfPreview3d">
+            <div class="pfPreviewMsg" id="pfPreviewMsg">prévia 3D</div>
+          </div>
+
+          <div class="pfOpts">
+            <div class="pfOpt">
+              <span class="pfOptLbl">Cor</span>
+              <div class="pfPick" id="pfColor"></div>
+            </div>
+            <div class="pfOpt">
+              <span class="pfOptLbl">Camisa</span>
+              <div class="pfPick" id="pfShirt"></div>
+            </div>
+            <div class="pfOpt">
+              <span class="pfOptLbl">Corpo</span>
+              <div class="pfPick" id="pfBody"></div>
+            </div>
+            <div class="pfOpt">
+              <span class="pfOptLbl">Pele</span>
+              <div class="pfPick" id="pfSkin"></div>
+            </div>
+            <div class="pfOpt">
+              <span class="pfOptLbl">Boca</span>
+              <div class="pfPick" id="pfProp"></div>
+            </div>
+          </div>
+        </div>
+
         <div class="row" style="margin-top: 12px">
           <button id="pfSave" class="btn primary">Salvar</button>
           <button id="pfCancel" class="btn">Cancelar</button>
@@ -331,5 +370,6 @@
     <script src="/fx.js"></script>
     <script src="/client.js"></script>
     <script src="/mode3d.js"></script>
+    <script src="/lookeditor.js"></script>
   </body>
 </html>

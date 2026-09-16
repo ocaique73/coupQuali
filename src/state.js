@@ -3,7 +3,8 @@
 const { findPlayer, seatedPlayers, queuedPlayers, lobbyPlayers, inGamePlayers,
         aliveCount, MAX_SEATS } = require("./rooms");
 const { actionBlockInfo } = require("./rules");
-const { THEMES, DEFAULT_THEME } = require("./constants");
+const { THEMES, DEFAULT_THEME, PLAYER_COLORS } = require("./constants");
+const { takenColors } = require("./rooms");
 
 function roomPublicState(room, viewerId) {
   const ig = inGamePlayers(room);
@@ -55,6 +56,7 @@ function roomPublicState(room, viewerId) {
     nick: p.nick,
     avatar: p.avatar || null,
     color: p.color ?? 0,
+    look: p.look || null,
     ready: !!p.ready,
     inGame: !!p.inGame,
     connected: !!p.connected,
@@ -92,6 +94,7 @@ function roomPublicState(room, viewerId) {
       nick: p.nick,
       avatar: p.avatar || null,
       color: p.color ?? 0,
+      look: p.look || null,
       coins: p.coins,
       connected: p.connected,
       aliveCount: aliveCount(p),
@@ -142,8 +145,10 @@ function roomPublicState(room, viewerId) {
       ? { byNick: room.paused.byNick, untilAt: room.paused.untilAt }
       : null,
 
-    theme: room.theme || DEFAULT_THEME,
     themes: THEMES,
+    palette: PLAYER_COLORS,
+    // cores já usadas por outros — o editor de perfil desabilita essas
+    takenColors: [...takenColors(room, findPlayer(room, viewerId))],
   };
 }
 

@@ -2,7 +2,7 @@
 // É aqui que mora o estado mutável do servidor.
 const { now } = require("./util");
 const {
-  DEFAULT_THEME, MAX_SEATS, PLAYER_COLORS,
+  DEFAULT_THEME, MAX_SEATS, PLAYER_COLORS, SKINS,
 } = require("./constants");
 
 const rooms = new Map();
@@ -95,6 +95,29 @@ function aliveCount(p) {
 
 // dá ao jogador a menor cor livre entre quem está sentado, para dois vizinhos
 // nunca ficarem com o mesmo contorno
+// Aparência inicial: varia por cor para a mesa não nascer com clones.
+function defaultAppearance(colorIdx) {
+  return {
+    shirt: colorIdx % 2 ? "long" : "short",
+    body: "thin",
+    skin: colorIdx % SKINS,
+    prop: colorIdx % 3 === 0 ? "smoke" : "none",
+  };
+}
+
+// Cores em uso pelos OUTROS jogadores da sala (para ninguém repetir).
+function takenColors(room, except) {
+  return new Set(
+    room.players
+      .filter((x) => x !== except && x.seated && (x.connected || x.inGame))
+      .map((x) => x.color),
+  );
+}
+
+function colorFree(room, p, idx) {
+  return !takenColors(room, p).has(idx);
+}
+
 function assignColor(room, p) {
   const used = new Set(
     room.players
@@ -140,5 +163,6 @@ module.exports = {
   rooms, getRoom, addLog, pushEvent, findPlayer,
   connectedPlayers, seatedPlayers, queuedPlayers, lobbyPlayers, inGamePlayers,
   isAlive, aliveCount, assignColor, electHost, ensureHost, removeRoomIfEmpty,
+  defaultAppearance, takenColors, colorFree,
   MAX_SEATS,
 };

@@ -26,6 +26,13 @@ const MAX_SEATS = 6;
 const PLAYER_COLORS = 6;
 
 // temas: trocam a arte das cartas e as cores da mesa/painéis
+// Aparência do personagem 3D. Valores validados no servidor — o cliente
+// não manda nada fora destas listas.
+const SHIRTS = ["short", "long"];
+const BODIES = ["thin", "fat"];
+const SKINS = 6; // índices 0..5, do mais claro ao mais escuro
+const PROPS = ["none", "smoke"];
+
 const THEMES = ["politica", "qualitas"];
 const DEFAULT_THEME = "politica";
 
@@ -50,5 +57,6 @@ module.exports = {
   PAUSE_MAX_MS, ROOM_GRACE_MS,
   ROLES, MAX_SEATS, PLAYER_COLORS,
   THEMES, DEFAULT_THEME,
+  SHIRTS, BODIES, SKINS, PROPS,
   CHAT_MAX, CHAT_MIN_MS, EMOTE_MIN_MS, EMOTES,
 };

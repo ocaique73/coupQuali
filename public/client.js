@@ -271,11 +271,9 @@ socket.on("me", ({ pid }) => {
 socket.on("state", (s) => {
   const prev = state;
   state = s;
-  // o tema decide de qual pasta vêm as artes: tem de valer antes do render
-  applyTheme(s.theme);
   renderAll();
   // a cena 3D recebe o MESMO estado; muda só o desenho
-  window.COUP3D?.onState(s, myId);
+  push3D();
   // depois do render: os retângulos usados pelas animações já estão corretos
   consumeEvents(s.events, prev);
 });
@@ -351,6 +349,9 @@ function consumeEvents(events) {
 }
 
 function scheduleEvent(ev) {
+  // moedas atravessando a mesa, embaixador pegando carta, carta perdida
+  window.COUP3D?.onGameEvent(ev);
+
   switch (ev.type) {
     case "game_start":
       FX.enqueue(() => {
@@ -833,15 +834,28 @@ function openProfile() {
   pfRefreshPreview();
   els.profileModal.classList.remove("hidden");
   els.pfNick.focus();
+
+  const eu = (state?.roomPlayers || []).find((p) => p.id === myId);
+  window.LOOK?.open({
+    look: eu?.look || null,
+    color: eu?.color ?? 0,
+    taken: state?.takenColors || [],
+  });
+  window.LOOK?.setAvatar(myAvatar);
+  window.LOOK?.resume();
 }
 
 function closeProfile() {
   els.profileModal.classList.add("hidden");
+  window.LOOK?.stop(); // para o loop da previa enquanto o modal esta fechado
 }
 
 els.editProfileBtn.onclick = openProfile;
 els.pfCancel.onclick = closeProfile;
-els.pfAvatar.oninput = pfRefreshPreview;
+els.pfAvatar.oninput = () => {
+  pfRefreshPreview();
+  window.LOOK?.setAvatar((els.pfAvatar.value || "").trim());
+};
 
 els.pfSave.onclick = () => {
   const nick = (els.pfNick.value || "").trim().slice(0, 20);
@@ -856,7 +870,13 @@ els.pfSave.onclick = () => {
   store(localStorage, "coup.nick", myNick);
   store(localStorage, "coup.avatar", myAvatar);
 
-  socket.emit("profile", { nick: myNick, avatar: myAvatar || null });
+  const v = window.LOOK?.value() || {};
+  socket.emit("profile", {
+    nick: myNick,
+    avatar: myAvatar || null,
+    look: v.look,
+    color: v.color,
+  });
   closeProfile();
 };
 
@@ -871,12 +891,17 @@ const THEME_META = {
   qualitas: { label: "Qualitas", dot: "#ff8a00" },
 };
 
-function applyTheme(theme) {
-  const t = THEME_META[theme] ? theme : "politica";
+// O tema é INDIVIDUAL: fica no navegador de cada um, não na sala. Pode
+// mudar a qualquer momento, inclusive no meio da partida.
+let myTheme = store(localStorage, "coup.theme") || "politica";
 
-  // marca sempre: no primeiro estado o tema já é o padrão e, sem isso,
-  // o body ficaria sem data-theme nenhum
+function applyTheme(theme, salvar) {
+  const t = THEME_META[theme] ? theme : "politica";
   document.body.dataset.theme = t;
+  if (salvar) {
+    myTheme = t;
+    store(localStorage, "coup.theme", t);
+  }
 
   if (UI.theme === t) return;
   UI.theme = t;
@@ -891,10 +916,8 @@ function applyTheme(theme) {
 
 function renderThemePicker() {
   const themes = state?.themes || ["politica", "qualitas"];
-  const cur = state?.theme || "politica";
-  const isHost = state?.hostId === myId;
 
-  const sig = `${themes.join(",")}|${cur}|${isHost}`;
+  const sig = `${themes.join(",")}|${myTheme}`;
   if (els.themePicker.dataset.sig === sig) return;
   els.themePicker.dataset.sig = sig;
 
@@ -902,13 +925,16 @@ function renderThemePicker() {
   for (const t of themes) {
     const meta = THEME_META[t] || { label: t, dot: "#888" };
     const b = document.createElement("button");
-    b.className = `themeBtn ${t === cur ? "on" : ""}`;
+    b.className = `themeBtn ${t === myTheme ? "on" : ""}`;
     b.innerHTML = `<i style="background:${meta.dot}"></i>${UI.escape(meta.label)}`;
-    b.disabled = !isHost;
-    b.title = isHost
-      ? `Usar o tema ${meta.label}`
-      : "Só o host troca o tema da sala";
-    b.onclick = () => socket.emit("theme", { theme: t });
+    // individual e liberado em partida: se travar, dá para trocar e seguir
+    b.title = `Usar o tema ${meta.label}`;
+    b.onclick = () => {
+      applyTheme(t, true);
+      els.themePicker.dataset.sig = "";
+      renderAll();
+      window.COUP3D?.refresh();
+    };
     els.themePicker.appendChild(b);
   }
 }
@@ -956,7 +982,27 @@ els.eyeBtn.onclick = () => {
   hideMyCards = !hideMyCards;
   els.eyeBtn.textContent = hideMyCards ? "🙈" : "👁️";
   renderTable();
+  push3D(); // esconder cartas vale no 3D também
 };
+
+// Estado que o 3D precisa além do state do servidor: quem pode ser clicado
+// como alvo e se as cartas estão escondidas.
+function push3D() {
+  if (!state) return;
+  ligar3D();
+  const targets =
+    targeting && actionAvailability(targeting).ok
+      ? new Set(aliveOpponents().map((p) => p.id))
+      : null;
+  window.COUP3D?.onState(state, myId, { targets, hideCards: hideMyCards });
+}
+
+// clicar no personagem no 3D escolhe o alvo, igual clicar no card no 2D.
+// Registrado aqui dentro porque o mode3d.js so carrega depois deste arquivo.
+function ligar3D() {
+  if (window.COUP3D && !window.COUP3D.pickTarget)
+    window.COUP3D.pickTarget = (pid) => pickTarget(pid);
+}
 
 els.acceptBtn.onclick = () => socket.emit("react", { decision: "accept" });
 els.contestBtn.onclick = () => socket.emit("react", { decision: "contest" });
@@ -1013,6 +1059,7 @@ function startTargeting(action) {
   els.targetBar.classList.remove("hidden");
   renderActions();
   renderTable();
+  push3D();
 }
 
 function cancelTargeting() {
@@ -1020,6 +1067,7 @@ function cancelTargeting() {
   els.targetBar.classList.add("hidden");
   renderActions();
   renderTable();
+  push3D();
 }
 
 function pickTarget(playerId) {
@@ -1030,6 +1078,7 @@ function pickTarget(playerId) {
   socket.emit("action", { type: t.type, targetId: playerId });
   renderActions();
   renderTable();
+  push3D();
 }
 
 /* ------------------------------------------------------------------ */
@@ -1993,3 +2042,8 @@ setInterval(() => {
   if (state.paused) renderPause();
   if (state.started) renderTable();
 }, 250);
+
+// Tema individual. Fica no FIM de propósito: applyTheme usa THEME_META e
+// myTheme, que são const/let declarados mais abaixo — chamado no topo, caía
+// na zona morta temporal e o client.js nem carregava.
+applyTheme(myTheme, false);
