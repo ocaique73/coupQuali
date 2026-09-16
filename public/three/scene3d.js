@@ -10,6 +10,7 @@
 
 import * as THREE from "three";
 
+const ARM_X = 0.29; // distância do ombro ao centro do corpo
 const COLORS = [0x3aa6ff, 0x2dd36f, 0xff6ad5, 0xff9d3a, 0xa78bfa, 0x22d3ee];
 
 let renderer, scene, camera, clock, myHand;
@@ -196,8 +197,14 @@ function buildLamp() {
 
   lampPivot.add(lamp);
 
+  // A mesa devolve luz para cima e acende os rostos de baixo, como numa
+  // mesa de bar. Sem isso os jogadores ficavam em silhueta preta.
+  const bounce = new THREE.PointLight(0xffb870, 26, 7, 2);
+  bounce.position.set(0, 1.35, 0);
+  scene.add(bounce);
+
   // um respiro ambiente para os rostos não ficarem chapados de preto
-  scene.add(new THREE.AmbientLight(0x3a3355, 1.25));
+  scene.add(new THREE.AmbientLight(0x3a3355, 1.35));
   const fill = new THREE.PointLight(0x5a4a80, 14, 16);
   fill.position.set(0, 3.4, 0);
   scene.add(fill);
@@ -207,52 +214,157 @@ function buildLamp() {
 /* personagem                                                          */
 /* ------------------------------------------------------------------ */
 
-function buildCharacter(colorIdx, propKind) {
+// Tons de pele e cabelo variados, para a mesa não ficar com seis clones.
+const SKINS = [0xf1c9a0, 0xe0a875, 0xc68642, 0x8d5524, 0x5c3317, 0xffdbac];
+const HAIRS = [0x1c1410, 0x2a1d14, 0x4a3520, 0x6b4a2a, 0x9a6b3f, 0xd9b380];
+
+function buildCharacter(colorIdx, propKind, seed = 0) {
   const g = new THREE.Group();
   const shirt = new THREE.Color(COLORS[colorIdx % COLORS.length]);
 
   const skinMat = new THREE.MeshStandardMaterial({
-    color: 0xc98f5d,
-    roughness: 0.85,
+    color: SKINS[(colorIdx + seed) % SKINS.length],
+    roughness: 0.72,
   });
   const shirtMat = new THREE.MeshStandardMaterial({
     color: shirt,
-    roughness: 0.75,
+    roughness: 0.68,
+  });
+  const hairMat = new THREE.MeshStandardMaterial({
+    color: HAIRS[(colorIdx * 2 + seed) % HAIRS.length],
+    roughness: 0.95,
+  });
+  const darkMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a22,
+    roughness: 0.6,
   });
 
-  // tronco
+  // quadril / base sentada
+  const hips = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.27, 0.3, 0.2, 16),
+    darkMat,
+  );
+  hips.position.y = 0.84;
+  hips.castShadow = true;
+  g.add(hips);
+
+  // tronco: mais largo em cima que embaixo, como ombros de gente
   const torso = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.26, 0.42, 6, 14),
+    new THREE.CylinderGeometry(0.3, 0.23, 0.52, 20),
     shirtMat,
   );
-  torso.position.y = 1.16;
+  torso.position.y = 1.2;
   torso.castShadow = true;
   g.add(torso);
 
-  // cabeça
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 20, 16), skinMat);
-  head.position.y = 1.68;
+  // ombros arredondados
+  for (const sx of [-1, 1]) {
+    const sh = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 12), shirtMat);
+    sh.position.set(sx * 0.29, 1.43, 0);
+    sh.castShadow = true;
+    g.add(sh);
+  }
+
+  // gola
+  const collar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.17, 0.09, 16),
+    shirtMat,
+  );
+  collar.position.y = 1.5;
+  g.add(collar);
+
+  // pescoço
+  const neck = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.075, 0.085, 0.12, 12),
+    skinMat,
+  );
+  neck.position.y = 1.56;
+  g.add(neck);
+
+  // cabeça: esfera achatada nas laterais, mais próxima de um crânio
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 24, 20), skinMat);
+  head.scale.set(0.9, 1.12, 0.95);
+  head.position.y = 1.74;
   head.castShadow = true;
   g.add(head);
 
-  // cabelo (calota)
+  // orelhas
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), skinMat);
+    ear.scale.set(0.5, 1, 0.7);
+    ear.position.set(sx * 0.15, 1.74, 0);
+    g.add(ear);
+  }
+
+  // nariz
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.07, 8), skinMat);
+  nose.rotation.x = Math.PI / 2;
+  nose.position.set(0, 1.73, 0.16);
+  g.add(nose);
+
+  // olhos (brancos + íris) — é o que mais faz o rosto "existir"
+  const eyeW = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.3 });
+  const eyeD = new THREE.MeshStandardMaterial({ color: 0x1b1410, roughness: 0.2 });
+  for (const sx of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.SphereGeometry(0.032, 12, 10), eyeW);
+    w.scale.set(1, 0.72, 0.6);
+    w.position.set(sx * 0.062, 1.79, 0.145);
+    g.add(w);
+
+    const d = new THREE.Mesh(new THREE.SphereGeometry(0.016, 10, 8), eyeD);
+    d.position.set(sx * 0.062, 1.79, 0.166);
+    g.add(d);
+
+    // sobrancelha
+    const br = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.02), hairMat);
+    br.position.set(sx * 0.062, 1.828, 0.15);
+    br.rotation.z = sx * 0.12;
+    g.add(br);
+  }
+
+  // cabelo: calota + franja
   const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.2, 20, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x2a1d14, roughness: 0.9 }),
+    new THREE.SphereGeometry(0.178, 22, 18, 0, Math.PI * 2, 0, Math.PI / 1.85),
+    hairMat,
   );
-  hair.position.y = 1.7;
+  hair.scale.set(0.94, 1.1, 1);
+  hair.position.y = 1.755;
   g.add(hair);
 
-  // braços apoiados na mesa
+  const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.05), hairMat);
+  fringe.position.set(0, 1.85, 0.115);
+  g.add(fringe);
+
+  // braços: ombro -> antebraço -> mão, apoiados na mesa
   const arms = new THREE.Group();
-  for (const s of [-1, 1]) {
-    const arm = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.075, 0.34, 4, 10),
+  for (const sx of [-1, 1]) {
+    const arm = new THREE.Group();
+
+    const upper = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.068, 0.24, 4, 10),
       shirtMat,
     );
-    arm.position.set(s * 0.3, 1.12, 0.16);
-    arm.rotation.set(-0.9, 0, s * 0.22);
-    arm.castShadow = true;
+    upper.position.set(0, -0.1, 0.05);
+    upper.rotation.x = -0.55;
+    upper.castShadow = true;
+    arm.add(upper);
+
+    const fore = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.058, 0.24, 4, 10),
+      skinMat,
+    );
+    fore.position.set(0, -0.19, 0.28);
+    fore.rotation.x = -1.25;
+    fore.castShadow = true;
+    arm.add(fore);
+
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.068, 12, 10), skinMat);
+    hand.scale.set(1, 0.7, 1.25);
+    hand.position.set(0, -0.22, 0.42);
+    hand.castShadow = true;
+    arm.add(hand);
+
+    arm.position.set(sx * ARM_X, 1.43, 0);
     arms.add(arm);
   }
   g.add(arms);
@@ -260,7 +372,7 @@ function buildCharacter(colorIdx, propKind) {
 
   // adereço: cigarro (com brasa e fumaça) ou capim na boca
   const prop = new THREE.Group();
-  prop.position.set(0.09, 1.62, 0.17);
+  prop.position.set(0.07, 1.695, 0.135);
   if (propKind === "smoke") {
     const cig = new THREE.Mesh(
       new THREE.CylinderGeometry(0.012, 0.012, 0.16, 6),
@@ -318,7 +430,7 @@ function buildCharacter(colorIdx, propKind) {
 // Onde cada um senta. O jogador local fica no ângulo 0 (perto da câmera) e os
 // outros se espalham pelo ARCO OPOSTO da mesa — num círculo completo, quem
 // estivesse a 90° ficaria ao lado da câmera e nunca apareceria na tela.
-const SEAT_R = 2.9;
+const SEAT_R = 2.62;
 const FAR_ARC = Math.PI * 0.55;
 
 function seatAngle(idx, total) {
@@ -336,7 +448,7 @@ function buildSeat(p, idx, total) {
   g.position.set(Math.sin(ang) * SEAT_R, 0, Math.cos(ang) * SEAT_R);
   g.lookAt(0, 1, 0);
 
-  const body = buildCharacter(p.color ?? 0, idx % 2 ? "straw" : "smoke");
+  const body = buildCharacter(p.color ?? 0, idx % 2 ? "straw" : "smoke", idx);
   g.add(body);
 
   // as duas cartas na mão, inclinadas para o dono
@@ -346,15 +458,15 @@ function buildSeat(p, idx, total) {
   const cards = [];
   for (let i = 0; i < 2; i++) {
     const card = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.3, 0.44),
+      new THREE.PlaneGeometry(0.26, 0.39), // 2:3, igual a arte
       new THREE.MeshStandardMaterial({
         color: 0x16213a,
         roughness: 0.6,
         side: THREE.DoubleSide,
       }),
     );
-    card.position.set((i - 0.5) * 0.34, 0, i * 0.004);
-    card.rotation.z = (i - 0.5) * 0.16;
+    card.position.set((i - 0.5) * 0.29, 0, i * 0.004);
+    card.rotation.z = (i - 0.5) * 0.07;
     card.castShadow = true;
     hand.add(card);
     cards.push(card);
@@ -367,12 +479,12 @@ function buildSeat(p, idx, total) {
   g.add(chips);
 
   const label = makeLabel(p.nick);
-  label.position.set(0, 2.12, 0);
+  label.position.set(0, 2.34, 0);
   g.add(label);
 
   const coinLbl = makeLabel("0", "#ffd400");
   coinLbl.scale.set(0.9, 0.24, 1);
-  coinLbl.position.set(0, 1.92, 0);
+  coinLbl.position.set(0, 2.11, 0);
   g.add(coinLbl);
 
   // anel no chão marcando de quem é a vez
@@ -447,7 +559,7 @@ function updateCards(seat, p, mine) {
     mesh.material.needsUpdate = true;
 
     // carta perdida tomba na mesa
-    mesh.rotation.z = c.alive ? (i - 0.5) * 0.16 : (i - 0.5) * 0.16 + 0.5;
+    mesh.rotation.z = c.alive ? (i - 0.5) * 0.07 : (i - 0.5) * 0.07 + 0.5;
     mesh.material.opacity = c.alive ? 1 : 0.5;
     mesh.material.transparent = !c.alive;
   });
@@ -458,18 +570,19 @@ function updateCards(seat, p, mine) {
 // ficaria atrás da sua própria cabeça.
 function buildMyHand() {
   myHand = new THREE.Group();
-  myHand.position.set(0, -0.44, -1.32);
-  myHand.rotation.x = 0.34;
+  // Menor e quase reta: antes as cartas comiam meia tela e ficavam tortas.
+  myHand.position.set(0, -0.40, -1.68);
+  myHand.rotation.x = 0.16;
 
   for (let i = 0; i < 2; i++) {
     const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.42, 0.6),
+      new THREE.PlaneGeometry(0.3, 0.45), // 2:3, a mesma proporcao da arte
       // Basic (sem luz) de propósito: a sala é escura, mas a sua mão
       // precisa estar sempre legível
       new THREE.MeshBasicMaterial({ color: 0x16213a, side: THREE.DoubleSide }),
     );
-    m.position.set((i - 0.5) * 0.5, 0, i * 0.002);
-    m.rotation.z = (i - 0.5) * -0.18;
+    m.position.set((i - 0.5) * 0.33, 0, i * 0.002);
+    m.rotation.z = (i - 0.5) * -0.05;
     myHand.add(m);
   }
 
@@ -493,7 +606,7 @@ function updateMyHand(p) {
     }
     m.material.opacity = c.alive ? 1 : 0.45;
     m.material.transparent = !c.alive;
-    m.rotation.z = (i - 0.5) * -0.18 + (c.alive ? 0 : 0.35);
+    m.rotation.z = (i - 0.5) * -0.05 + (c.alive ? 0 : 0.4);
     m.material.needsUpdate = true;
   });
 }
@@ -682,24 +795,34 @@ function animate() {
     }
 
     // braço levantado (dedo / L) e palmas
+    // Braços: cada um é um grupo (ombro/antebraço/mão) ancorado no ombro,
+    // então a pose é rotação do grupo, não deslocamento de uma cápsula.
     const arms = s.body.userData.arms;
     if (arms) {
       const raise = (s.body.userData.raise || 0) - nowMs;
       const clap = (s.body.userData.clap || 0) - nowMs;
-      const a = arms.children[1];
+      const L = arms.children[0];
+      const R = arms.children[1];
+
       if (raise > 0) {
-        const k = Math.min(1, (2000 - raise) / 600);
-        a.rotation.x = -0.9 - k * 1.5;
-        a.position.y = 1.12 + k * 0.42;
+        // levanta só o braço direito; o esquerdo segue segurando a carta
+        const k = Math.min(1, (2000 - raise) / 500);
+        R.rotation.x = -2.15 * k;
+        R.rotation.z = -0.25 * k;
+        L.rotation.set(0, 0, 0);
+        L.position.x = -ARM_X;
+        R.position.x = ARM_X;
       } else if (clap > 0) {
-        const s2 = Math.sin(nowMs * 0.02) * 0.18;
-        arms.children[0].position.x = -0.3 + 0.16 + s2;
-        arms.children[1].position.x = 0.3 - 0.16 - s2;
+        const d = Math.abs(Math.sin(nowMs * 0.018)) * 0.16;
+        L.rotation.set(-0.5, 0, 0);
+        R.rotation.set(-0.5, 0, 0);
+        L.position.x = -ARM_X + 0.14 + d;
+        R.position.x = ARM_X - 0.14 - d;
       } else {
-        a.rotation.x = -0.9;
-        a.position.y = 1.12;
-        arms.children[0].position.x = -0.3;
-        arms.children[1].position.x = 0.3;
+        L.rotation.set(0, 0, 0);
+        R.rotation.set(0, 0, 0);
+        L.position.x = -ARM_X;
+        R.position.x = ARM_X;
       }
     }
 

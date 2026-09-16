@@ -633,9 +633,48 @@ function scheduleEvent(ev) {
 
     case "reconnected":
       FX.enqueue(() => {
-        FX.banner({ title: `🔌 ${ev.nick} voltou`, cls: "good", dur: 1300 });
+        FX.banner({
+          title: `🔌 ${ev.nick} voltou`,
+          sub: ev.seated === false ? "a sala encheu — foi para a fila" : "",
+          cls: "good",
+          dur: 1400,
+        });
         FX.ping(seatEls.get(ev.playerId)?.root, "turnPulse", 900);
       }, 700);
+      break;
+
+    // ---- presença no lobby ----
+    case "joined":
+      FX.banner({
+        title: `👋 ${ev.nick} entrou`,
+        sub: ev.seated ? "" : "está na fila",
+        dur: 1200,
+      });
+      break;
+
+    case "left":
+      FX.banner({ title: `${ev.nick} saiu`, cls: "warn", dur: 1100 });
+      break;
+
+    case "ready":
+      FX.banner({
+        title: `${ev.ready ? "✔" : "✖"} ${ev.nick}`,
+        sub: ev.ready ? "pronto" : "cancelou o READY",
+        cls: ev.ready ? "good" : "",
+        dur: 1000,
+      });
+      break;
+
+    case "host":
+      FX.banner({ title: `👑 ${ev.nick} agora é o host`, cls: "warn", dur: 1500 });
+      break;
+
+    case "seated":
+      FX.banner({ title: `${ev.nick} entrou na mesa`, cls: "good", dur: 1200 });
+      break;
+
+    case "queued":
+      FX.banner({ title: `${ev.nick} voltou para a fila`, cls: "warn", dur: 1200 });
       break;
   }
 }

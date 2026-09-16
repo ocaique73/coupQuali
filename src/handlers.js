@@ -7,7 +7,7 @@ const {
 } = require("./constants");
 const {
   getRoom, addLog, pushEvent, findPlayer,
-  seatedPlayers, inGamePlayers, isAlive, assignColor, electHost,
+  seatedPlayers, inGamePlayers, isAlive, assignColor, electHost, ensureHost,
   removeRoomIfEmpty,
 } = require("./rooms");
 const { actionRequiresClaim, claimRoleForAction, actionBlockInfo } = require("./rules");
@@ -64,19 +64,49 @@ function register(io) {
             ? `${cleanNick} entrou na sala.`
             : `${cleanNick} entrou na FILA (${room.started ? "partida em andamento" : "sala cheia"}).`,
         );
+        pushEvent(room, "joined", {
+          playerId: p.id,
+          nick: cleanNick,
+          seated: canSit,
+        });
       } else {
         p.socketId = socket.id;
         p.nick = cleanNick;
         p.avatar = cleanAvatar;
         const wasOffline = !p.connected;
         p.connected = true;
+
+        // Quem sai do lobby PERDE a cadeira na hora (ver disconnect). Ao
+        // voltar, senta de novo só se ainda sobrar lugar — senão a sala
+        // passaria de MAX_SEATS quando alguém ocupasse a vaga no meio-tempo.
+        if (!p.seated && !room.started && seatedPlayers(room).length < MAX_SEATS) {
+          p.seated = true;
+          assignColor(room, p);
+        }
+
         if (wasOffline) {
-          addLog(room, `🔌 ${cleanNick} reconectou.`);
-          pushEvent(room, "reconnected", { playerId: p.id, nick: cleanNick });
+          addLog(
+            room,
+            p.seated
+              ? `${cleanNick} voltou para a sala.`
+              : `${cleanNick} voltou, mas a sala encheu — foi para a fila.`,
+          );
+          pushEvent(room, "reconnected", {
+            playerId: p.id,
+            nick: cleanNick,
+            seated: !!p.seated,
+          });
         }
       }
   
+      // o host pode ter ficado órfão (caiu sem ser ele o último a sair)
       if (!room.hostId) room.hostId = p.id;
+      const novoHost = ensureHost(room);
+      if (novoHost) {
+        const h = findPlayer(room, novoHost);
+        addLog(room, `Novo host: ${h?.nick ?? "?"}`);
+        pushEvent(room, "host", { playerId: novoHost, nick: h?.nick ?? "?" });
+      }
       room.emptySince = 0;
   
       socket.join(key);
@@ -96,6 +126,11 @@ function register(io) {
   
       p.ready = !p.ready;
       addLog(room, `${p.nick} está ${p.ready ? "READY" : "NOT READY"}.`);
+      pushEvent(room, "ready", {
+        playerId: p.id,
+        nick: p.nick,
+        ready: !!p.ready,
+      });
       broadcast(room);
     });
   
@@ -125,6 +160,7 @@ function register(io) {
       p.ready = false;
       assignColor(room, p);
       addLog(room, `${p.nick} foi puxado da fila para a sala.`);
+      pushEvent(room, "seated", { playerId: p.id, nick: p.nick });
       broadcast(room);
     });
   
@@ -141,6 +177,7 @@ function register(io) {
       p.seated = false;
       p.ready = false;
       addLog(room, `${p.nick} voltou para a fila.`);
+      pushEvent(room, "queued", { playerId: p.id, nick: p.nick });
       broadcast(room);
     });
   
@@ -460,16 +497,23 @@ function register(io) {
         addLog(room, `🔌 ${p.nick} caiu (pode reconectar).`);
         pushEvent(room, "disconnected", { playerId: p.id, nick: p.nick });
       } else {
+        // fora de partida a cadeira é liberada DE VERDADE, para outro poder
+        // sentar. Antes ela só sumia das listas, e a sala estourava o limite
+        // quando o jogador voltava e reocupava o lugar.
+        p.seated = false;
+        p.ready = false;
         addLog(room, `${p.nick} saiu.`);
+        pushEvent(room, "left", { playerId: p.id, nick: p.nick });
       }
   
-      if (room.hostId === myPid) {
-        electHost(room);
-        if (room.hostId)
-          addLog(
-            room,
-            `Novo host: ${findPlayer(room, room.hostId)?.nick ?? "?"}`,
-          );
+      // Re-elege sempre que o host ficar offline, nao so quando foi ele o
+      // que caiu: o host podia ficar orfao e ninguem conseguia iniciar,
+      // pausar ou reiniciar a sala.
+      const novoHost = ensureHost(room);
+      if (novoHost) {
+        const h = findPlayer(room, novoHost);
+        addLog(room, `Novo host: ${h?.nick ?? "?"}`);
+        pushEvent(room, "host", { playerId: novoHost, nick: h?.nick ?? "?" });
       }
   
       broadcast(room);

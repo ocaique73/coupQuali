@@ -110,11 +110,24 @@ function assignColor(room, p) {
   p.color = 0;
 }
 
+// O host TEM de estar online: se ficar com quem caiu, ninguém consegue
+// iniciar, pausar ou reiniciar a sala. Prefere alguém sentado; só recorre à
+// fila se não houver ninguém sentado e online.
 function electHost(room) {
-  // prefere alguem sentado; so cai para a fila se a sala estiver vazia
-  const seated = seatedPlayers(room);
-  const pool = seated.length ? seated : connectedPlayers(room);
+  const seatedOnline = room.players.filter((p) => p.connected && p.seated);
+  const pool = seatedOnline.length ? seatedOnline : connectedPlayers(room);
   room.hostId = pool.length ? pool[0].id : null;
+  return room.hostId;
+}
+
+// Re-elege sempre que o host atual sumiu ou caiu. Chamado a cada entrada e
+// saída, porque o host pode ficar órfão sem ser ele o que desconectou.
+function ensureHost(room) {
+  const h = room.hostId ? findPlayer(room, room.hostId) : null;
+  if (h && h.connected) return null;
+  const antes = room.hostId;
+  electHost(room);
+  return room.hostId && room.hostId !== antes ? room.hostId : null;
 }
 
 // não destrói na hora: marca o momento em que esvaziou. O tick apaga só depois
@@ -126,6 +139,6 @@ function removeRoomIfEmpty(room) {
 module.exports = {
   rooms, getRoom, addLog, pushEvent, findPlayer,
   connectedPlayers, seatedPlayers, queuedPlayers, lobbyPlayers, inGamePlayers,
-  isAlive, aliveCount, assignColor, electHost, removeRoomIfEmpty,
+  isAlive, aliveCount, assignColor, electHost, ensureHost, removeRoomIfEmpty,
   MAX_SEATS,
 };
