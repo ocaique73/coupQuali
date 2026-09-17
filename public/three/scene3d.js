@@ -47,6 +47,14 @@ const flying = []; // moedas/cartas em movimento pela mesa
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
+// Giro da câmera pelo arraste. É só um deslocamento em volta do MESMO ponto
+// de vista: a câmera continua ancorada no assento do jogador, então girar
+// não revela a carta de ninguém — ela é desenhada de costas para a mesa.
+const orbit = { yaw: 0, pitch: 0, dragging: false, lx: 0, ly: 0, moved: false };
+const YAW_MAX = Math.PI * 0.42;
+const PITCH_MIN = -0.25;
+const PITCH_MAX = 0.55;
+
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
@@ -310,6 +318,8 @@ export function buildCharacter({ color = 0, look = null, avatar = null, seed = 0
   const shirtMat = new THREE.MeshStandardMaterial({
     color: new THREE.Color(COLORS[color % COLORS.length]),
     roughness: 0.68,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
   });
   const skinMat = new THREE.MeshStandardMaterial({
     color: SKINS[(L.skin ?? 0) % SKINS.length],
@@ -496,6 +506,9 @@ export function buildCharacter({ color = 0, look = null, avatar = null, seed = 0
   }
   g.add(arms);
   g.userData.arms = arms;
+  // guardado para o brilho da vez: é a ROUPA que pulsa, não uma luz em volta
+  g.userData.shirtMat = shirtMat;
+  g.userData.shirtColor = new THREE.Color(COLORS[color % COLORS.length]);
 
   const prop = new THREE.Group();
   prop.position.set(0.07, 1.688, 0.135);
@@ -638,20 +651,6 @@ function buildSeat(p, idx, total) {
   refs.ring.rotation.x = -Math.PI / 2;
   refs.ring.position.y = 0.02;
   g.add(refs.ring);
-
-  // halo fluorescente de quem está na vez
-  refs.glow = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.52, 0.62, 2.1, 20, 1, true),
-    new THREE.MeshBasicMaterial({
-      color: 0xffe066,
-      transparent: true,
-      opacity: 0,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    }),
-  );
-  refs.glow.position.y = 1.05;
-  g.add(refs.glow);
 
   // alvo de clique: cilindro invisível cobrindo o corpo
   refs.hit = new THREE.Mesh(
@@ -899,6 +898,34 @@ function onPointerMove(e) {
   const r = renderer.domElement.getBoundingClientRect();
   pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1;
   pointer.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+
+  if (orbit.dragging) {
+    const dx = e.clientX - orbit.lx;
+    const dy = e.clientY - orbit.ly;
+    orbit.lx = e.clientX;
+    orbit.ly = e.clientY;
+    if (Math.abs(dx) + Math.abs(dy) > 2) orbit.moved = true;
+    orbit.yaw = Math.max(-YAW_MAX, Math.min(YAW_MAX, orbit.yaw - dx * 0.005));
+    orbit.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, orbit.pitch + dy * 0.004));
+  }
+}
+
+function onPointerDown(e) {
+  orbit.dragging = true;
+  orbit.moved = false;
+  orbit.lx = e.clientX;
+  orbit.ly = e.clientY;
+}
+
+function onPointerUp() {
+  orbit.dragging = false;
+  renderer.domElement.style.cursor = "";
+}
+
+// duplo clique volta a câmera para o centro
+function onDblClick() {
+  orbit.yaw = 0;
+  orbit.pitch = 0;
 }
 
 function pick() {
@@ -917,6 +944,11 @@ function pick() {
 }
 
 function onClick(e) {
+  // arrastar para girar não pode disparar clique (escolher alvo, lâmpada)
+  if (orbit.moved) {
+    orbit.moved = false;
+    return;
+  }
   onPointerMove(e);
   const hit = pick();
   if (!hit) return;
@@ -959,6 +991,10 @@ export function init(el, opts = {}) {
   buildMyHand();
 
   renderer.domElement.addEventListener("pointermove", onPointerMove);
+  renderer.domElement.addEventListener("pointerdown", onPointerDown);
+  renderer.domElement.addEventListener("pointerup", onPointerUp);
+  renderer.domElement.addEventListener("pointerleave", onPointerUp);
+  renderer.domElement.addEventListener("dblclick", onDblClick);
   renderer.domElement.addEventListener("click", onClick);
 
   clock = new THREE.Clock();
@@ -987,6 +1023,31 @@ function respostaDe(state, pid) {
     if (v === "contest") return { t: "CONTESTA", bg: "rgba(120,25,25,.92)" };
   }
   return null;
+}
+
+// A câmera é recalculada TODO QUADRO, não só quando chega estado novo do
+// servidor: senão arrastar para girar só mexia de 250 em 250 ms, aos solavancos.
+function posicionaCamera() {
+  const me = seats.get(myId);
+  if (!me) {
+    camera.position.set(0, 4.6, 6.2);
+    camera.lookAt(0, 0.9, 0);
+    return;
+  }
+  const p = me.group.position;
+  const k = thirdPerson ? 1.78 : 1.34;
+  const alt = thirdPerson ? 3.1 : 2.12;
+  const olha = thirdPerson ? 1.0 : 0.92;
+
+  // o arraste gira o ponto de vista em volta do centro da mesa
+  const ang = Math.atan2(p.x, p.z) + orbit.yaw;
+  const raio = Math.hypot(p.x, p.z) * k;
+  camera.position.set(
+    Math.sin(ang) * raio,
+    alt + orbit.pitch * 1.4,
+    Math.cos(ang) * raio,
+  );
+  camera.lookAt(0, olha, 0);
 }
 
 export function update(state, meId, opts = {}) {
@@ -1052,10 +1113,13 @@ export function update(state, meId, opts = {}) {
     const current = state.phase === "turn" && state.currentPlayerId === p.id;
     s.isCurrent = current;
 
-    // Em 1ª pessoa a câmera fica DENTRO do meu assento. Sprites usam
-    // depthTest:false e, coladas na lente, viravam letras gigantes cobrindo
-    // a tela — foi o que aconteceu com o meu próprio cronômetro.
-    const esconderMeuCorpo = p.id === meId && !thirdPerson;
+    // As minhas etiquetas flutuantes ficam SEMPRE escondidas: usam
+    // depthTest:false e a câmera é a mais perto delas, então viravam letras
+    // gigantes cobrindo a tela (em 1ª pessoa coladas na lente, em 3ª logo à
+    // frente). O HUD no canto mostra tudo isso sem atrapalhar a cena.
+    const souEu = p.id === meId;
+    // o corpo some só em 1ª pessoa — em 3ª eu quero me ver na mesa
+    const esconderMeuCorpo = souEu && !thirdPerson;
 
     if (current && state.turnEndsAt) {
       const txt = window.UI.timeLeft(state.turnEndsAt);
@@ -1064,7 +1128,7 @@ export function update(state, meId, opts = {}) {
         const urg = window.UI.secsLeft(state.turnEndsAt) <= 10;
         s.timeLbl.userData.redraw(`⏱ ${txt}`, urg ? "#ff5555" : "#ffd400", null);
       }
-      s.timeLbl.visible = !esconderMeuCorpo;
+      s.timeLbl.visible = !souEu;
     } else {
       s.timeLbl.visible = false;
       s.timeTxt = "";
@@ -1076,7 +1140,7 @@ export function update(state, meId, opts = {}) {
         s.respTxt = r.t;
         s.respLbl.userData.redraw(r.t, "#ffffff", r.bg);
       }
-      s.respLbl.visible = !esconderMeuCorpo;
+      s.respLbl.visible = !souEu;
     } else {
       s.respLbl.visible = false;
       s.respTxt = "";
@@ -1089,12 +1153,11 @@ export function update(state, meId, opts = {}) {
 
     s.body.visible = !esconderMeuCorpo;
     s.hand.visible = !esconderMeuCorpo;
-    s.label.visible = !esconderMeuCorpo;
-    s.coinLbl.visible = !esconderMeuCorpo;
+    s.label.visible = !souEu;
+    s.coinLbl.visible = !souEu;
     // Em 1ª pessoa a câmera fica DENTRO do meu próprio assento: fichas e halo
     // envolviam a lente e viravam borrões amarelos tapando a tela.
     s.chips.visible = !esconderMeuCorpo;
-    s.glow.visible = !esconderMeuCorpo;
     s.ring.visible = !esconderMeuCorpo;
 
     s.body.position.y = p.aliveCount <= 0 ? -0.25 : 0;
@@ -1103,20 +1166,7 @@ export function update(state, meId, opts = {}) {
   updateMyHand(players.find((x) => x.id === meId));
   if (myHand) myHand.visible = !thirdPerson && !!seats.get(meId);
 
-  const me = seats.get(meId);
-  if (me) {
-    const p = me.group.position;
-    if (thirdPerson) {
-      camera.position.set(p.x * 1.78, 3.1, p.z * 1.78);
-      camera.lookAt(0, 1.0, 0);
-    } else {
-      camera.position.set(p.x * 1.34, 2.12, p.z * 1.34);
-      camera.lookAt(0, 0.92, 0);
-    }
-  } else {
-    camera.position.set(0, 4.6, 6.2);
-    camera.lookAt(0, 0.9, 0);
-  }
+  posicionaCamera();
 
   if (deckMesh) deckMesh.visible = (state?.deckCount ?? 0) > 0;
 }
@@ -1147,6 +1197,8 @@ function animate() {
 
   const t = clock.getElapsedTime();
   const nowMs = performance.now();
+
+  posicionaCamera();
 
   // lâmpada: balanço lento; mais forte se alguém a empurrou ou bateu na mesa
   if (lampPivot) {
@@ -1185,9 +1237,13 @@ function animate() {
   for (const [, s] of seats) {
     s.body.rotation.z = Math.sin(t * 0.8 + s.group.position.x) * 0.012;
 
-    if (s.glow) {
-      const alvo = s.isCurrent ? 0.16 + Math.sin(t * 3) * 0.07 : 0;
-      s.glow.material.opacity += (alvo - s.glow.material.opacity) * 0.12;
+    // Na vez do jogador a ROUPA acende e pulsa na cor dele. O cilindro de
+    // luz que havia antes em volta do corpo ficava feio e sujava a cena.
+    const sm = s.body.userData.shirtMat;
+    if (sm) {
+      const alvo = s.isCurrent ? 0.45 + Math.sin(t * 3.4) * 0.35 : 0;
+      sm.emissive.copy(s.body.userData.shirtColor);
+      sm.emissiveIntensity += (alvo - sm.emissiveIntensity) * 0.14;
     }
 
     if (s.ring) {
@@ -1290,6 +1346,10 @@ export function dispose() {
   cancelAnimationFrame(raf);
   if (renderer) {
     renderer.domElement.removeEventListener("pointermove", onPointerMove);
+    renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+    renderer.domElement.removeEventListener("pointerup", onPointerUp);
+    renderer.domElement.removeEventListener("pointerleave", onPointerUp);
+    renderer.domElement.removeEventListener("dblclick", onDblClick);
     renderer.domElement.removeEventListener("click", onClick);
     renderer.dispose();
     if (renderer.domElement.parentNode)

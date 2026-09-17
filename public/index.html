@@ -158,6 +158,21 @@
           <!-- Avisos do centro da mesa. Ficam FORA da mesa 2D de propósito:
                dentro dela, sumiam junto quando o jogador trocava para o 3D. -->
           <div id="centerBanner" class="centerBanner"></div>
+
+          <!-- Meus dados. Também fora das mesas, para valer no 2D e no 3D:
+               em 1ª pessoa o meu próprio card não aparece na cena. -->
+          <div id="meHud" class="meHud hidden">
+            <div class="meTop">
+              <div class="meAva" id="meAva"><span>👤</span></div>
+              <div class="meNick" id="meNick">—</div>
+            </div>
+            <div class="meRow">
+              <span class="meCoins" id="meCoins"></span>
+              <b class="meCoinsN" id="meCoinsN">0</b>
+            </div>
+            <div class="meCards" id="meCards"></div>
+            <div class="meTurn hidden" id="meTurn">SUA VEZ</div>
+          </div>
         </div>
       </div>
 

@@ -78,6 +78,14 @@ const els = {
   chatSend: document.getElementById("chatSend"),
   chatLeft: document.getElementById("chatLeft"),
 
+  meHud: document.getElementById("meHud"),
+  meAva: document.getElementById("meAva"),
+  meNick: document.getElementById("meNick"),
+  meCoins: document.getElementById("meCoins"),
+  meCoinsN: document.getElementById("meCoinsN"),
+  meCards: document.getElementById("meCards"),
+  meTurn: document.getElementById("meTurn"),
+
   log: document.getElementById("log"),
   discard: document.getElementById("discard"),
   roleGuide: document.getElementById("roleGuide"),
@@ -982,6 +990,8 @@ els.eyeBtn.onclick = () => {
   hideMyCards = !hideMyCards;
   els.eyeBtn.textContent = hideMyCards ? "🙈" : "👁️";
   renderTable();
+  els.meHud.dataset.sig = "";
+  renderMeHud();
   push3D(); // esconder cartas vale no 3D também
 };
 
@@ -1987,6 +1997,52 @@ function renderPause() {
   els.pauseOverlay.classList.remove("hidden");
 }
 
+// Meus dados na borda da tela. Existe porque em 1ª pessoa o meu próprio
+// personagem some da cena — sem isto eu enxergava as moedas de todo mundo
+// menos as minhas. Vale nos dois visuais.
+function renderMeHud() {
+  const m = me();
+  if (!m || !state?.started) {
+    els.meHud.classList.add("hidden");
+    return;
+  }
+  els.meHud.classList.remove("hidden");
+
+  const sig = [
+    m.nick, m.coins, m.avatar || "", m.color,
+    (m.hand || []).map((c) => (c.role || "?") + "|" + c.alive).join(","),
+    hideMyCards, state.currentPlayerId === myId, UI.theme,
+  ].join("|");
+  if (els.meHud.dataset.sig === sig) return;
+  els.meHud.dataset.sig = sig;
+
+  els.meHud.style.setProperty("--seatColor", "var(--pc" + ((m.color ?? 0) % 6) + ")");
+
+  els.meAva.innerHTML = m.avatar
+    ? '<img src="' + UI.escape(m.avatar) + '" alt="" />'
+    : '<span>👤</span>';
+
+  els.meNick.textContent = m.nick;
+  els.meCoins.innerHTML = coinStackHTML(m.coins);
+  els.meCoinsN.textContent = String(m.coins);
+
+  els.meCards.innerHTML = "";
+  for (const c of m.hand || []) {
+    const d = document.createElement('div');
+    const mostrar = hideMyCards ? null : c.role;
+    d.className = "meCard " + (mostrar ? UI.roleClass(mostrar) : "back") + (c.alive ? "" : " dead");
+    d.innerHTML = mostrar
+      ? UI.roleArt(mostrar) + "<span>" + UI.escape(UI.rolePt(mostrar)) + "</span>"
+      : '<span class="meBack">C</span>';
+    els.meCards.appendChild(d);
+  }
+
+  els.meTurn.classList.toggle(
+    "hidden",
+    !(state.phase === "turn" && state.currentPlayerId === myId),
+  );
+}
+
 function renderWinner() {
   const w = state?.winner;
   const fresh = w && Date.now() - w.ts < 3 * 60_000;
@@ -2029,6 +2085,7 @@ function renderAll() {
 
   renderLog();
   renderDiscard();
+  renderMeHud();
   renderLossModal();
   renderExchangeModal();
   renderPause();

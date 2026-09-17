@@ -19,6 +19,15 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
 - [x] B3. **Brilho fluorescente** em volta de quem está na vez
 - [x] B4. Mais detalhe no personagem: **dedos, corpo e rosto**
 
+## L. Rodada de acabamento
+
+- [x] L1. Trocar a luz pulsando da vez pela **roupa brilhando e pulsando** na
+      cor do jogador (a luz atual ficou feia)
+- [x] L2. **HUD dos meus dados** na borda da tela (nick, moedas, cartas),
+      valendo no 2D e no 3D
+- [x] L3. **Girar a câmera** arrastando no 3D, sem conseguir ver a carta dos
+      outros
+
 ## C. Tema e modo (individuais)
 
 - [x] C1. Tema é **individual**, não mais da sala
