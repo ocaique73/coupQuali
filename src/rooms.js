@@ -2,7 +2,7 @@
 // É aqui que mora o estado mutável do servidor.
 const { now } = require("./util");
 const {
-  DEFAULT_THEME, MAX_SEATS, PLAYER_COLORS, SKINS,
+  DEFAULT_THEME, MAX_SEATS, PLAYER_COLORS, SKINS, HEADS,
 } = require("./constants");
 
 const rooms = new Map();
@@ -102,6 +102,7 @@ function defaultAppearance(colorIdx) {
     body: "thin",
     skin: colorIdx % SKINS,
     prop: colorIdx % 3 === 0 ? "smoke" : "none",
+    head: HEADS[colorIdx % HEADS.length],
   };
 }
 

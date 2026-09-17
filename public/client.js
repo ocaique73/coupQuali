@@ -154,6 +154,21 @@ let myNick = store(localStorage, "coup.nick") || "";
 let myAvatar = store(localStorage, "coup.avatar") || "";
 
 let hideMyCards = false;
+
+// O visual escolhido mora no navegador junto com nick e foto: sem isso, cada
+// sala nova (ou cada F5) devolvia um personagem sorteado pelo servidor e era
+// preciso remontar tudo de novo.
+let meuLook = (() => {
+  try {
+    const cru = localStorage.getItem("coup.look");
+    const o = cru ? JSON.parse(cru) : null;
+    return o && typeof o === "object" ? o : null;
+  } catch {
+    return null;
+  }
+})();
+let minhaCor = Number(localStorage.getItem("coup.cor"));
+if (!Number.isInteger(minhaCor) || minhaCor < 0 || minhaCor > 5) minhaCor = null;
 let targeting = null; // ação escolhida esperando alvo
 let exchangeSelected = [];
 
@@ -294,6 +309,19 @@ socket.on("state", aplicarEstado);
 // A bancada de ajustes (/teste) desenha a mesa sem servidor: ela monta um
 // estado de mentira e o empurra por aqui, pelo mesmo caminho de sempre.
 window.__coupAplicarEstado = aplicarEstado;
+
+// E fica ISOLADA do servidor. Antes ela entrava na sala de verdade: ao
+// mandar um chat rápido, o servidor respondia com o estado real de /teste —
+// onde só existe uma pessoa — e os outros quatro bonecos sumiam da mesa até
+// a bancada reenviar o estado de mentira. Daí o "piscam e somem".
+window.__coupBancada = () => {
+  joined = true;
+  socket.emit = () => {};
+  try {
+    socket.disconnect();
+  } catch {}
+  renderJoinOrGame();
+};
 
 /* ------------------------------------------------------------------ */
 /* helpers de estado                                                    */
@@ -805,6 +833,10 @@ function doJoin() {
     nick: myNick,
     pid: MY_PID,
     avatar: myAvatar || null,
+    // O visual vai junto: sem isto, entrar noutra sala ou dar F5 devolvia um
+    // personagem sorteado, e era preciso remontar tudo de novo.
+    look: meuLook,
+    color: minhaCor,
   });
   joined = true;
 }
@@ -914,6 +946,14 @@ els.pfSave.onclick = () => {
   store(localStorage, "coup.avatar", myAvatar);
 
   const v = window.LOOK?.value() || {};
+  if (v.look) {
+    meuLook = v.look;
+    store(localStorage, "coup.look", JSON.stringify(v.look));
+  }
+  if (Number.isInteger(v.color)) {
+    minhaCor = v.color;
+    store(localStorage, "coup.cor", String(v.color));
+  }
   socket.emit("profile", {
     nick: myNick,
     avatar: myAvatar || null,
@@ -2085,6 +2125,11 @@ function renderMeHud() {
     return;
   }
   els.meHud.classList.remove("hidden");
+  // tamanho vem da bancada de ajustes, junto com o resto do visual
+  els.meHud.style.setProperty(
+    "--hudEsc",
+    String(window.AJUSTES3D?.get("hudEscala") ?? 1),
+  );
 
   const sig = [
     m.nick, m.coins, m.avatar || "", m.color,

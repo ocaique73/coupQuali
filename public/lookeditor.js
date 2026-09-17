@@ -14,6 +14,7 @@
     shirt: document.getElementById("pfShirt"),
     body: document.getElementById("pfBody"),
     skin: document.getElementById("pfSkin"),
+    head: document.getElementById("pfHead"),
     prop: document.getElementById("pfProp"),
   };
 
@@ -30,13 +31,20 @@
       { id: "thin", label: "Magro" },
       { id: "fat", label: "Gordo" },
     ],
+    head: [
+      { id: "hair", label: "Cabelo" },
+      { id: "bald", label: "Careca" },
+      { id: "cap", label: "Boné" },
+      { id: "cowboy", label: "Cowboy" },
+    ],
     prop: [
       { id: "none", label: "Nada" },
       { id: "smoke", label: "Cigarro" },
     ],
   };
 
-  let look = { shirt: "short", body: "thin", skin: 1, prop: "none" };
+  const PADRAO_LOOK = { shirt: "short", body: "thin", skin: 1, prop: "none", head: "hair" };
+  let look = Object.assign({}, PADRAO_LOOK);
   let color = 0;
   let taken = new Set();
   let viewer = null; // módulo da vitrine
@@ -84,7 +92,7 @@
       );
     });
 
-    for (const campo of ["shirt", "body", "prop"]) {
+    for (const campo of ["shirt", "body", "head", "prop"]) {
       PICKS[campo].innerHTML = "";
       for (const o of OPCOES[campo]) {
         PICKS[campo].appendChild(
@@ -122,7 +130,7 @@
   // ---- API usada pelo client.js ----
   window.LOOK = {
     open(atual) {
-      look = Object.assign({ shirt: "short", body: "thin", skin: 1, prop: "none" }, atual.look || {});
+      look = Object.assign({}, PADRAO_LOOK, atual.look || {});
       color = Number.isInteger(atual.color) ? atual.color : 0;
       taken = new Set(atual.taken || []);
       render();

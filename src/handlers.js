@@ -3,7 +3,7 @@
 const { now, cleanPid, randomPid, safeAvatarUrl, roomKeyFromPath } = require("./util");
 const {
   MAX_SEATS, RESPONSE_MS, PLAYER_COLORS,
-  SHIRTS, BODIES, SKINS, PROPS,
+  SHIRTS, BODIES, SKINS, PROPS, HEADS,
   CHAT_MAX, CHAT_MIN_MS, EMOTE_MIN_MS, EMOTES,
 } = require("./constants");
 const {
@@ -20,12 +20,29 @@ const {
   killSpecificInfluence, applyExchangeSelection,
 } = require("./game");
 
+// Aparência que veio do navegador, peneirada: só valores das listas.
+// Usada no join e no profile para o visual escolhido sobreviver ao F5 e a
+// entrar noutra sala, do mesmo jeito que o nick e a foto sobrevivem.
+function limparLook(look, atual) {
+  if (!look || typeof look !== "object") return atual;
+  return {
+    shirt: SHIRTS.includes(look.shirt) ? look.shirt : atual.shirt,
+    body: BODIES.includes(look.body) ? look.body : atual.body,
+    skin:
+      Number.isInteger(look.skin) && look.skin >= 0 && look.skin < SKINS
+        ? look.skin
+        : atual.skin,
+    prop: PROPS.includes(look.prop) ? look.prop : atual.prop,
+    head: HEADS.includes(look.head) ? look.head : atual.head,
+  };
+}
+
 function register(io) {
   io.on("connection", (socket) => {
     let joinedRoomKey = null;
     let myPid = null; // identidade estável desta aba (não muda ao reconectar)
   
-    socket.on("join", ({ roomKey, nick, pid, avatar }) => {
+    socket.on("join", ({ roomKey, nick, pid, avatar, look, color }) => {
       const key = roomKeyFromPath(roomKey);
       const room = getRoom(key);
       joinedRoomKey = key;
@@ -59,7 +76,17 @@ function register(io) {
         };
         room.players.push(p);
         if (canSit) assignColor(room, p);
-        p.look = defaultAppearance(p.color ?? 0);
+        // A cor guardada no navegador só vale se ninguém na sala já estiver
+        // usando: cor é exclusiva por mesa.
+        if (
+          canSit &&
+          Number.isInteger(color) &&
+          color >= 0 &&
+          color < PLAYER_COLORS &&
+          colorFree(room, p, color)
+        )
+          p.color = color;
+        p.look = limparLook(look, defaultAppearance(p.color ?? 0));
         addLog(
           room,
           canSit
@@ -201,18 +228,8 @@ function register(io) {
       p.avatar = safeAvatarUrl(avatar);
 
       // aparência: só valores das listas; o resto é ignorado
-      if (look && typeof look === "object") {
-        const cur = p.look || defaultAppearance(p.color ?? 0);
-        p.look = {
-          shirt: SHIRTS.includes(look.shirt) ? look.shirt : cur.shirt,
-          body: BODIES.includes(look.body) ? look.body : cur.body,
-          skin:
-            Number.isInteger(look.skin) && look.skin >= 0 && look.skin < SKINS
-              ? look.skin
-              : cur.skin,
-          prop: PROPS.includes(look.prop) ? look.prop : cur.prop,
-        };
-      }
+      if (look && typeof look === "object")
+        p.look = limparLook(look, p.look || defaultAppearance(p.color ?? 0));
 
       // A cor é EXCLUSIVA na sala: se outro já usa, mantém a atual e avisa.
       let corNegada = false;

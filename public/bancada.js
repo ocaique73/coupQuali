@@ -22,16 +22,19 @@
   })();
   const h = (role, alive) => ({ role, alive, revealed: !alive });
 
+  // Variedade de propósito: cada um com um item de cabeça diferente, um com
+  // carta perdida virada para cima e um já eliminado — assim dá para ajustar
+  // a cena vendo todos os estados de uma vez.
   const gente = [
-    { nick: "Você", color: 4, look: { shirt: "short", body: "thin", skin: 1, prop: "smoke" },
+    { nick: "Você", color: 4, look: { shirt: "short", body: "thin", skin: 1, prop: "smoke", head: "hair" },
       coins: 7, hand: [h("Duke", true), h("Captain", true)] },
-    { nick: "Bruna", color: 2, look: { shirt: "long", body: "fat", skin: 4, prop: "none" },
+    { nick: "Bruna", color: 2, look: { shirt: "long", body: "fat", skin: 4, prop: "none", head: "cowboy" },
       coins: 3, hand: [h("Assassin", false), h(null, true)] },
-    { nick: "Rafael", color: 1, look: { shirt: "long", body: "thin", skin: 2, prop: "smoke" },
+    { nick: "Rafael", color: 1, look: { shirt: "long", body: "thin", skin: 2, prop: "smoke", head: "cap" },
       coins: 12, hand: [h(null, true), h(null, true)] },
-    { nick: "Lu", color: 3, look: { shirt: "short", body: "fat", skin: 5, prop: "none" },
-      coins: 0, hand: [h(null, true), h(null, true)] },
-    { nick: "Téo", color: 0, look: { shirt: "short", body: "thin", skin: 3, prop: "smoke" },
+    { nick: "Lu", color: 3, look: { shirt: "short", body: "fat", skin: 5, prop: "none", head: "bald" },
+      coins: 0, hand: [h("Duke", false), h("Contessa", false)] },
+    { nick: "Téo", color: 0, look: { shirt: "short", body: "thin", skin: 3, prop: "smoke", head: "hair" },
       coins: 5, hand: [h(null, true), h(null, true)] },
   ];
 
@@ -197,10 +200,9 @@
   /* ------------------------------------------------------------------ */
 
   function ligar() {
-    // entra direto: a bancada não tem tela de entrada
-    const nick = document.getElementById("nickInput");
-    if (nick) nick.value = "Você";
-    document.getElementById("joinBtn")?.click();
+    // Entra direto e SEM servidor: clicar em "Entrar" mandaria um join de
+    // verdade, e qualquer resposta do servidor apagaria os bonecos de mentira.
+    window.__coupBancada?.();
 
     window.COUP3D?.setMode?.("3d");
     window.__coupAplicarEstado?.(estado());

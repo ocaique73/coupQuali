@@ -32,6 +32,7 @@ const SHIRTS = ["short", "long"];
 const BODIES = ["thin", "fat"];
 const SKINS = 6; // índices 0..5, do mais claro ao mais escuro
 const PROPS = ["none", "smoke"];
+const HEADS = ["hair", "bald", "cap", "cowboy"];
 
 const THEMES = ["politica", "qualitas"];
 const DEFAULT_THEME = "politica";
@@ -57,6 +58,6 @@ module.exports = {
   PAUSE_MAX_MS, ROOM_GRACE_MS,
   ROLES, MAX_SEATS, PLAYER_COLORS,
   THEMES, DEFAULT_THEME,
-  SHIRTS, BODIES, SKINS, PROPS,
+  SHIRTS, BODIES, SKINS, PROPS, HEADS,
   CHAT_MAX, CHAT_MIN_MS, EMOTE_MIN_MS, EMOTES,
 };

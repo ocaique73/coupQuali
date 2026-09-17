@@ -18,12 +18,26 @@
     assentoRaio: 2.62, // distância de cada boneco ao centro da mesa
     bonecoEscala: 1.0,
     bonecoAltura: 0, // sobe ou desce o boneco inteiro
-    bonecoArco: 0.55, // quanto do círculo os outros ocupam (x PI)
+    bonecoInclina: 0, // 0 = de pé; positivo deita para a frente
+
+    // ---- cartas e fichas na mesa ----
+    cartaTamanho: 1.0,
+    cartaBorda: 0.34, // o quanto as cartas ficam para dentro da borda
+    cartaAfasta: 0.15, // meia distância entre as duas cartas de um jogador
+    fichaAfasta: 0.46, // distância das fichas até as cartas
 
     // ---- lâmpada ----
     lampadaAltura: 4.4, // onde o fio nasce no teto
     lampadaFio: 1.5, // comprimento do fio
     lampadaAbajur: 0.45, // raio do abajur
+    lampadaAmortece: 0.3, // quanto o balanço perde por segundo
+
+    // ---- roupa acesa na vez ----
+    roupaForca: 0.8, // o quanto a roupa acende
+    roupaVel: 3.4, // velocidade da pulsação
+
+    // ---- HUD ----
+    hudEscala: 1.0,
 
     // ---- luz ----
     luzForca: 42, // foco de cima
@@ -56,12 +70,26 @@
       ["assentoRaio", "Distância da mesa", 1.6, 4.2, 0.01],
       ["bonecoEscala", "Tamanho", 0.5, 1.8, 0.01],
       ["bonecoAltura", "Altura", -0.8, 0.8, 0.01],
-      ["bonecoArco", "Abertura do semicírculo", 0.3, 1.0, 0.01],
+      ["bonecoInclina", "Inclinação (0 = de pé)", -0.5, 0.6, 0.01],
+    ]],
+    ["Cartas e fichas", [
+      ["cartaTamanho", "Tamanho da carta", 0.5, 2, 0.02],
+      ["cartaBorda", "Distância da borda", 0.05, 1.2, 0.01],
+      ["cartaAfasta", "Espaço entre as duas", 0.05, 0.5, 0.01],
+      ["fichaAfasta", "Fichas ao lado", 0.1, 1.2, 0.01],
+    ]],
+    ["Roupa acesa na vez", [
+      ["roupaForca", "Intensidade", 0, 2, 0.02],
+      ["roupaVel", "Velocidade", 0.5, 10, 0.1],
+    ]],
+    ["HUD", [
+      ["hudEscala", "Tamanho do HUD", 0.6, 1.8, 0.02],
     ]],
     ["Lâmpada", [
       ["lampadaAltura", "Altura do teto", 2.5, 6, 0.05],
       ["lampadaFio", "Comprimento do fio", 0.3, 3, 0.05],
       ["lampadaAbajur", "Tamanho do abajur", 0.2, 1.2, 0.01],
+      ["lampadaAmortece", "Freio do balanço", 0.02, 2, 0.02],
     ]],
     ["Luz", [
       ["luzForca", "Força do foco", 0, 120, 1],

@@ -3081,6 +3081,9 @@ body[data-theme="qualitas"] .lookBtn {
   position: absolute;
   left: 10px;
   bottom: 10px;
+  /* o tamanho vem da bancada de ajustes */
+  transform: scale(var(--hudEsc, 1));
+  transform-origin: left bottom;
   z-index: 20;
   width: 176px;
   display: flex;

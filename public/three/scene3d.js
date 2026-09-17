@@ -7,7 +7,7 @@
 //
 // API:
 //   init(el, { onPickTarget })
-//   update(state, myId, opts)   opts: { theme, hideCards, thirdPerson, targets }
+//   update(state, myId, opts)   opts: { theme, thirdPerson, targets, mesa }
 //   emote(ev) / gameEvent(ev) / resize() / dispose()
 
 import * as THREE from "three";
@@ -21,7 +21,7 @@ const THEME_TABLE = {
   qualitas: { felt: 0xa8521a, glow: 0xffb56b, rim: 0x4a2408 },
 };
 
-let renderer, scene, camera, clock, myHand;
+let renderer, scene, camera, clock;
 let container = null;
 let lampPivot, lampLight, bounceLight, ambLight;
 let lampCord, lampBody, lampShade, lampBulb;
@@ -36,7 +36,6 @@ const texCache = new Map();
 
 let myId = null;
 let theme = "politica";
-let hideCards = false;
 let thirdPerson = false;
 let targets = null; // Set de ids clicáveis, ou null
 let vencedorId = null; // enquanto dura a comemoração, a câmera fica nele
@@ -46,7 +45,11 @@ const shakeUntil = { t: 0 };
 const lampKick = { t: 0 };
 // Empurrar a lâmpada com a mão: enquanto está segura ela obedece ao ponteiro,
 // e ao soltar volta a balançar sozinha a partir do ângulo onde parou.
-const lampDrag = { ativo: false, x: 0, z: 0, lx: 0, ly: 0, fase: 0 };
+const lampDrag = { ativo: false, x: 0, z: 0, lx: 0, ly: 0 };
+// Pêndulo de verdade: ângulo e velocidade nos dois eixos. A lâmpada volta
+// pela gravidade e vai perdendo força aos poucos, em vez de tremer rápido
+// e parar de uma vez.
+const lampFis = { z: 0, x: 0, vz: 0, vx: 0, t0: 0 };
 const LAMP_MAX = 0.55; // até onde dá para empurrar, em radianos
 const flying = []; // moedas/cartas em movimento pela mesa
 const pops = []; // símbolos de gesto subindo acima do jogador
@@ -529,6 +532,67 @@ function poseHand(h, nome) {
   if (h.userData.thumb) h.userData.thumb.rotation.set(p.t, 0, p.tz || 0);
 }
 
+// Cabelo, careca, boné ou chapéu de cowboy. Careca não desenha nada: a
+// cabeça de pele já está pronta por baixo.
+function montarCabeca(g, tipo, hairMat, skinMat, darkMat) {
+  if (tipo === "bald") return;
+
+  if (tipo === "cap" || tipo === "cowboy") {
+    const corCap = tipo === "cap" ? darkMat : new THREE.MeshStandardMaterial({
+      color: 0x6b4423,
+      roughness: 0.85,
+    });
+
+    const copa = new THREE.Mesh(
+      tipo === "cap"
+        ? new THREE.SphereGeometry(0.175, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2)
+        : new THREE.CylinderGeometry(0.12, 0.155, 0.19, 20),
+      corCap,
+    );
+    copa.position.y = tipo === "cap" ? 1.775 : 1.86;
+    g.add(copa);
+
+    if (tipo === "cap") {
+      // aba só na frente
+      const aba = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.2, 0.018, 20, 1, false, -0.9, 1.8),
+        corCap,
+      );
+      aba.position.set(0, 1.772, 0.075);
+      g.add(aba);
+    } else {
+      // aba em volta, e a fita
+      const aba = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.29, 0.29, 0.02, 24),
+        corCap,
+      );
+      aba.position.y = 1.775;
+      g.add(aba);
+
+      const fita = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.158, 0.158, 0.045, 20),
+        new THREE.MeshStandardMaterial({ color: 0x241509, roughness: 0.9 }),
+      );
+      fita.position.y = 1.795;
+      g.add(fita);
+    }
+    return;
+  }
+
+  // cabelo
+  const hair = new THREE.Mesh(
+    new THREE.SphereGeometry(0.178, 24, 18, 0, Math.PI * 2, 0, Math.PI / 1.85),
+    hairMat,
+  );
+  hair.scale.set(0.95, 1.1, 1);
+  hair.position.y = 1.757;
+  g.add(hair);
+
+  const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.05), hairMat);
+  fringe.position.set(0, 1.85, 0.118);
+  g.add(fringe);
+}
+
 // A foto do perfil NÃO entra aqui: ela aparece na placa acima da cabeça,
 // junto do nome e das moedas. Colada no rosto ficava irreconhecível e ainda
 // engolia a cara do boneco.
@@ -539,6 +603,7 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
     body: "thin",
     skin: seed % SKINS.length,
     prop: "none",
+    head: "hair",
   };
   const gordo = L.body === "fat";
   const mangaLonga = L.shirt === "long";
@@ -661,17 +726,7 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
   chin.position.set(0, 1.645, 0.06);
   g.add(chin);
 
-  const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.178, 24, 18, 0, Math.PI * 2, 0, Math.PI / 1.85),
-    hairMat,
-  );
-  hair.scale.set(0.95, 1.1, 1);
-  hair.position.y = 1.757;
-  g.add(hair);
-
-  const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.05), hairMat);
-  fringe.position.set(0, 1.85, 0.118);
-  g.add(fringe);
+  montarCabeca(g, L.head || "hair", hairMat, skinMat, darkMat);
 
   // Braço ESQUERDO segura as cartas; o DIREITO fica livre para os gestos.
   //
@@ -786,13 +841,12 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
 // O jogador local fica no ângulo 0 e os outros se espalham pelo ARCO OPOSTO:
 // num círculo completo, quem estivesse a 90° ficaria ao lado da câmera e
 // nunca apareceria na tela.
+// Todo mundo igualmente espaçado em volta da mesa: dois de frente um para o
+// outro, três num triângulo, quatro num quadrado. Antes os outros eram
+// espremidos num arco do lado oposto, para caberem na tela em 1ª pessoa — o
+// resultado era uma mesa torta, com o dono da sala afastado dos demais.
 function seatAngle(idx, total) {
-  if (idx === 0) return 0;
-  const k = total - 1;
-  if (k <= 1) return Math.PI;
-  const arco = Math.PI * aj("bonecoArco", 0.55);
-  const t = (idx - 1) / (k - 1);
-  return Math.PI - arco / 2 + t * arco;
+  return ((Math.PI * 2) / Math.max(1, total)) * idx;
 }
 
 // Reposiciona e redimensiona os bonecos. Chamado ao montar cada assento e
@@ -801,21 +855,40 @@ function ajustarAssentos() {
   const r = aj("assentoRaio", 2.62);
   const esc = aj("bonecoEscala", 1);
   const alt = aj("bonecoAltura", 0);
+  const inc = aj("bonecoInclina", 0);
+  const sup = tampo();
+  // as cartas ficam logo para dentro da borda da mesa, então acompanham
+  // qualquer mudança no tamanho dela
+  const zc = r - (aj("mesaRaio", 2.05) - aj("cartaBorda", 0.34));
+
   for (const [, st] of seats) {
     const ang = seatAngle(st.idx, st.total ?? seats.size);
     st.ang = ang;
     st.group.position.set(Math.sin(ang) * r, 0, Math.cos(ang) * r);
-    st.group.lookAt(0, 1, 0);
+    // olhar para o CHÃO do centro, não para 1 m de altura: mirar para cima
+    // inclinava o boneco inteiro para trás e ele parecia deitado
+    st.group.lookAt(0, 0, 0);
+
     st.escala = esc;
     st.alturaBase = alt;
     st.body.scale.setScalar(esc);
     st.body.position.y = alt;
+    st.body.rotation.x = inc; // inclinação é do corpo, não do assento
+
+    const ct = aj("cartaTamanho", 1);
+    const meia = aj("cartaAfasta", 0.15);
+    st.cartas.position.set(0, sup + 0.012, zc);
+    st.cards.forEach((c, i) => {
+      c.position.set((i - 0.5) * 2 * meia, i * 0.002, 0);
+      c.scale.setScalar(ct);
+    });
+    st.chips.position.set(aj("fichaAfasta", 0.46), sup + 0.02, zc);
   }
 }
 
 function lookSig(p) {
   const L = p.look || {};
-  return `${p.color}|${L.shirt}|${L.body}|${L.skin}|${L.prop}`;
+  return `${p.color}|${L.shirt}|${L.body}|${L.skin}|${L.prop}|${L.head}`;
 }
 
 function buildSeat(p, idx, total) {
@@ -823,7 +896,7 @@ function buildSeat(p, idx, total) {
   const ang = seatAngle(idx, total);
   const r = aj("assentoRaio", 2.62);
   g.position.set(Math.sin(ang) * r, 0, Math.cos(ang) * r);
-  g.lookAt(0, 1, 0);
+  g.lookAt(0, 0, 0); // para o chão do centro: mirar acima deitava o boneco
 
   const refs = {
     group: g, ang, idx, total,
@@ -842,10 +915,11 @@ function buildSeat(p, idx, total) {
   refs.body.position.y = refs.alturaBase;
   g.add(refs.body);
 
-  // as cartas ficam na MÃO ESQUERDA, para a direita sobrar para os gestos
-  const hand = new THREE.Group();
-  hand.position.set(-ARM_X, 1.2, 0.46);
-  hand.rotation.x = -0.28;
+  // As cartas ficam DEITADAS NA MESA, viradas para baixo — inclusive as
+  // minhas: eu vejo as minhas pelo HUD. A que o jogador perde abre para cima
+  // e todo mundo enxerga.
+  const cartas = new THREE.Group();
+  cartas.rotation.x = -Math.PI / 2; // deitadas no tampo
   refs.cards = [];
   for (let i = 0; i < 2; i++) {
     const card = new THREE.Mesh(
@@ -856,16 +930,15 @@ function buildSeat(p, idx, total) {
         side: THREE.DoubleSide,
       }),
     );
-    card.position.set((i - 0.5) * 0.28, 0, i * 0.004);
     card.castShadow = true;
-    hand.add(card);
+    cartas.add(card);
     refs.cards.push(card);
   }
-  g.add(hand);
-  refs.hand = hand;
+  g.add(cartas);
+  refs.cartas = cartas;
 
+  // as fichas ficam ao lado das cartas do dono
   refs.chips = new THREE.Group();
-  refs.chips.position.set(0.5, 1.0, 0.3);
   g.add(refs.chips);
 
   // foto, nome e moedas numa placa só, acima da cabeça
@@ -949,11 +1022,9 @@ function updateChips(seat, coins) {
   mk(false, silver);
 }
 
-function updateCards(seat, p, mine) {
-  const esconder = mine && hideCards;
+function updateCards(seat, p) {
   const sig =
     (p.hand || []).map((c) => `${c.role || "?"}|${c.alive}`).join(",") +
-    (esconder ? "|H" : "") +
     "|" +
     theme;
   if (seat.sig === sig) return;
@@ -963,15 +1034,10 @@ function updateCards(seat, p, mine) {
     const mesh = seat.cards[i];
     if (!mesh) return;
 
-    const show = esconder
-      ? c.alive
-        ? null
-        : c.role
-      : mine
-        ? c.role
-        : c.alive
-          ? null
-          : c.role;
+    // Na mesa, carta viva fica SEMPRE virada para baixo — a minha também,
+    // porque eu leio as minhas no HUD. A perdida vira para cima, de lado,
+    // para a mesa inteira ver o que caiu.
+    const show = c.alive ? null : c.role;
 
     if (show) {
       mesh.material.map = cardTexture(cardUrl(show));
@@ -981,79 +1047,11 @@ function updateCards(seat, p, mine) {
       mesh.material.color.set(0x16213a);
     }
     mesh.material.needsUpdate = true;
-    mesh.rotation.z = c.alive ? 0 : 0.5;
-    mesh.material.opacity = c.alive ? 1 : 0.5;
-    mesh.material.transparent = !c.alive;
+    mesh.rotation.z = c.alive ? 0 : 0.42;
+    mesh.material.opacity = 1;
+    mesh.material.transparent = false;
   });
 }
-
-/* ------------------------------------------------------------------ */
-/* minha mão (presa à câmera)                                          */
-/* ------------------------------------------------------------------ */
-
-function buildMyHand() {
-  myHand = new THREE.Group();
-  // baixa e recuada o bastante para a carta inteira caber no quadro
-  myHand.position.set(0, -0.44, -1.38);
-
-  // As minhas mãos segurando as cartas pelas bordas de baixo. Emissivas de
-  // propósito: presas à câmera, ficam fora do cone da lâmpada e sem isso
-  // apareciam como dois vultos pretos tapando a carta.
-  const skinMat = new THREE.MeshStandardMaterial({
-    color: 0xe8b487,
-    emissive: 0x6b4a33,
-    emissiveIntensity: 0.55,
-    roughness: 0.75,
-  });
-  for (const sx of [-1, 1]) {
-    const h = buildHand(skinMat);
-    h.scale.setScalar(0.92);
-    h.position.set(sx * 0.33, -0.2, 0.1);
-    h.rotation.set(-1.25, 0, sx * 0.55);
-    myHand.add(h);
-  }
-
-  for (let i = 0; i < 2; i++) {
-    const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.3, 0.45), // 2:3, a proporção da arte
-      // Basic de propósito: a sala é escura, mas a minha mão tem de estar
-      // sempre legível
-      new THREE.MeshBasicMaterial({ color: 0x16213a, side: THREE.DoubleSide }),
-    );
-    m.position.set((i - 0.5) * 0.34, 0, i * 0.002);
-    m.rotation.z = 0; // retas na vertical, sem leque
-    m.userData.card = true;
-    myHand.add(m);
-  }
-
-  camera.add(myHand);
-  scene.add(camera); // a câmera precisa estar na cena para os filhos aparecerem
-}
-
-function updateMyHand(p) {
-  if (!myHand) return;
-  const cards = myHand.children.filter((c) => c.userData.card);
-  (p?.hand || []).forEach((c, i) => {
-    const m = cards[i];
-    if (!m) return;
-    const show = hideCards ? null : c.role;
-    if (show) {
-      m.material.map = cardTexture(cardUrl(show));
-      m.material.color.set(0xffffff);
-    } else {
-      m.material.map = null;
-      m.material.color.set(hideCards ? 0x2a3550 : 0x16213a);
-    }
-    m.material.opacity = c.alive ? 1 : 0.45;
-    m.material.transparent = !c.alive;
-    m.rotation.z = c.alive ? 0 : 0.4;
-    m.material.needsUpdate = true;
-  });
-}
-
-/* ------------------------------------------------------------------ */
-/* moedas e cartas atravessando a mesa                                 */
-/* ------------------------------------------------------------------ */
 
 function bankPos() {
   return new THREE.Vector3(0.32, 1.1, 0.1);
@@ -1068,12 +1066,12 @@ function seatFront(pid) {
   s.group.localToWorld(v);
   return v;
 }
+// Onde ficam as cartas daquele jogador na mesa. A carta que voa do baralho
+// pousa aqui, e a que ele devolve sai daqui.
 function seatHand(pid) {
   const s = seats.get(pid);
   if (!s) return bankPos();
-  const v = new THREE.Vector3(-ARM_X, 1.25, 0.5);
-  s.group.localToWorld(v);
-  return v;
+  return s.cartas.getWorldPosition(new THREE.Vector3());
 }
 
 function flyChip(from, to, gold, delay = 0) {
@@ -1160,8 +1158,8 @@ function onPointerMove(e) {
     lampDrag.lx = e.clientX;
     lampDrag.ly = e.clientY;
     const lim = (v) => Math.max(-LAMP_MAX, Math.min(LAMP_MAX, v));
-    lampDrag.z = lim(lampDrag.z - dx * 0.004);
-    lampDrag.x = lim(lampDrag.x + dy * 0.004);
+    lampFis.z = lim(lampFis.z - dx * 0.004);
+    lampFis.x = lim(lampFis.x + dy * 0.004);
     return;
   }
 
@@ -1201,16 +1199,12 @@ function onPointerDown(e) {
 function onPointerUp() {
   if (lampDrag.ativo) {
     lampDrag.ativo = false;
-    // Solta de onde estava: a fase do balanço é escolhida para o primeiro
-    // quadro livre cair no mesmo ângulo, senão a lâmpada dava um salto.
-    const amp = 0.055 + 0.2;
-    const k = Math.max(-1, Math.min(1, lampDrag.z / amp));
-    lampDrag.fase = Math.asin(k) - clock.getElapsedTime() * 2.05;
-    // quanto mais longe foi empurrada, mais forte volta
-    const forca = Math.min(1, Math.abs(lampDrag.z) / LAMP_MAX);
+    // Larga onde está e deixa a gravidade trazer de volta: a velocidade
+    // começa em zero e o balanço nasce do próprio deslocamento.
+    lampFis.vz = 0;
+    lampFis.vx = 0;
+    const forca = Math.min(1, Math.abs(lampFis.z) / LAMP_MAX);
     lampKick.t = performance.now() + 1200 + forca * 2400;
-    lampDrag.z = 0;
-    lampDrag.x = 0;
   }
   orbit.dragging = false;
   renderer.domElement.style.cursor = "";
@@ -1258,7 +1252,8 @@ function onClick(e) {
   if (!hit) return;
 
   if (hit.lamp) {
-    // clique seco, sem arrastar: dá um tapa e ela balança
+    // clique seco, sem arrastar: dá um tapa e ela sai balançando
+    lampFis.vz += 0.9;
     lampKick.t = performance.now() + 2600;
     return;
   }
@@ -1292,7 +1287,6 @@ export function init(el, opts = {}) {
 
   buildRoom();
   buildLamp();
-  buildMyHand();
 
   renderer.domElement.addEventListener("pointermove", onPointerMove);
   renderer.domElement.addEventListener("pointerdown", onPointerDown);
@@ -1385,8 +1379,6 @@ function posicionaCamera() {
       (p.z / d) * (d + fora),
     );
     camera.lookAt(p.x, (vc.alturaBase ?? 0) + 1.45, p.z);
-    // as minhas cartas ficam presas à lente e tapariam o vencedor
-    if (myHand) myHand.visible = false;
     return;
   }
 
@@ -1423,7 +1415,6 @@ export function update(state, meId, opts = {}) {
     applyTheme(theme);
     for (const [, s] of seats) s.sig = ""; // força redesenhar a arte das cartas
   }
-  hideCards = !!opts.hideCards;
   thirdPerson = !!opts.thirdPerson;
   targets = opts.targets && opts.targets.size ? opts.targets : null;
 
@@ -1432,10 +1423,12 @@ export function update(state, meId, opts = {}) {
   const players = opts.mesa || state?.playersInGame || [];
   const ids = new Set(players.map((p) => p.id));
 
+  let mudouMesa = false;
   for (const [id, s] of seats) {
     if (!ids.has(id)) {
       scene.remove(s.group);
       seats.delete(id);
+      mudouMesa = true;
     }
   }
 
@@ -1448,7 +1441,12 @@ export function update(state, meId, opts = {}) {
     if (!s) {
       s = buildSeat(p, i, order.length);
       seats.set(p.id, s);
+      mudouMesa = true;
     }
+    // entrou ou saiu gente: o círculo inteiro se redistribui
+    if (s.total !== order.length || s.idx !== i) mudouMesa = true;
+    s.idx = i;
+    s.total = order.length;
 
     // trocou o visual no perfil: reconstrói o corpo
     const ls = lookSig(p);
@@ -1477,9 +1475,9 @@ export function update(state, meId, opts = {}) {
       s.plate.userData.setFoto(p.avatar || null);
     }
     updateChips(s, p.lobby ? 0 : p.coins);
-    updateCards(s, p, p.id === meId);
-    // no lobby as mãos ficam vazias: ninguém recebeu carta ainda
-    s.hand.visible = !p.lobby;
+    updateCards(s, p);
+    // no lobby ninguém recebeu carta ainda
+    s.cartas.visible = !p.lobby;
 
     const current = state.phase === "turn" && state.currentPlayerId === p.id;
     s.isCurrent = current;
@@ -1523,7 +1521,6 @@ export function update(state, meId, opts = {}) {
       s.ring.material.color.set(COLORS[(p.color ?? 0) % COLORS.length]);
 
     s.body.visible = !esconderMeuCorpo;
-    s.hand.visible = !esconderMeuCorpo;
     s.plate.visible = !souEu;
     // o balão some sozinho depois do tempo — e nunca fica no meu assento,
     // mesmo que eu já tivesse um na tela quando virei "eu" (troca de aba,
@@ -1536,10 +1533,31 @@ export function update(state, meId, opts = {}) {
     s.ring.visible = !esconderMeuCorpo;
 
     s.body.position.y = (s.alturaBase ?? 0) + (p.aliveCount <= 0 ? -0.25 : 0);
+
+    // Quem perdeu as duas cartas fica sem cor: dá para ver de longe quem já
+    // saiu, sem ter de contar carta virada.
+    const morto = p.aliveCount <= 0;
+    if (s.apagado !== morto) {
+      s.apagado = morto;
+      s.body.traverse((o) => {
+        const m = o.material;
+        if (!m || !m.color) return;
+        if (!m.userData.corViva) m.userData.corViva = m.color.clone();
+        if (morto) {
+          const c = m.userData.corViva;
+          const cinza = (c.r + c.g + c.b) / 3;
+          m.color.setRGB(cinza * 0.42, cinza * 0.42, cinza * 0.46);
+        } else {
+          m.color.copy(m.userData.corViva);
+        }
+      });
+    }
   });
 
-  updateMyHand(players.find((x) => x.id === meId));
-  if (myHand) myHand.visible = !thirdPerson && !!seats.get(meId);
+  // Posições de assento, carta e ficha saem todas dos ajustes; sem isto, um
+  // assento recém-criado nascia com as cartas no (0,0,0), dentro do pé da
+  // mesa, e sumiam da vista.
+  if (mudouMesa) ajustarAssentos();
 
   posicionaCamera();
 
@@ -1605,6 +1623,7 @@ export function emote(ev) {
     case "bang":
       shakeUntil.t = now + 900;
       lampKick.t = now + 1800;
+      lampFis.vz += 0.55; // a mesa treme e a lâmpada sente
       b.gesto = { nome: "bang", ate: now + 900, dur: 900 };
       for (const [, o] of seats)
         o.cards.forEach((c) => (c.userData.jump = now + 700));
@@ -1613,7 +1632,6 @@ export function emote(ev) {
     case "clap":
       // larga a carta na mesa e bate palma com as duas
       b.gesto = { nome: "clap", ate: now + 1800, dur: 1800 };
-      s.hand.userData.down = now + 1800;
       break;
 
     case "finger":
@@ -1660,17 +1678,30 @@ function animate() {
   // lâmpada: balanço lento; mais forte se alguém a empurrou ou bateu na mesa
   if (lampPivot) {
     const kick = Math.max(0, (lampKick.t - nowMs) / 2600);
-    const amp = 0.055 + kick * 0.2;
 
-    // Enquanto o jogador segura a lâmpada, ela obedece à mão; ao soltar,
-    // volta a balançar sozinha a partir de onde estava.
-    if (lampDrag.ativo) {
-      lampPivot.rotation.z = lampDrag.z;
-      lampPivot.rotation.x = lampDrag.x;
-    } else {
-      lampPivot.rotation.z = Math.sin(t * (0.55 + kick * 1.5) + lampDrag.fase) * amp;
-      lampPivot.rotation.x = Math.cos(t * (0.41 + kick * 1.2) + lampDrag.fase) * amp * 0.62;
+    // Pêndulo: a gravidade puxa de volta com força proporcional ao ângulo, e
+    // o freio tira energia devagar. Fio mais comprido balança mais devagar,
+    // como na vida real.
+    const dt = Math.min(0.05, (nowMs - (lampFis.t0 || nowMs)) / 1000);
+    lampFis.t0 = nowMs;
+
+    if (!lampDrag.ativo) {
+      const fio = Math.max(0.2, aj("lampadaFio", 1.5));
+      const w2 = 9.81 / fio;
+      const freio = Math.exp(-aj("lampadaAmortece", 0.3) * dt);
+
+      lampFis.vz = (lampFis.vz - w2 * lampFis.z * dt) * freio;
+      lampFis.vx = (lampFis.vx - w2 * lampFis.x * dt) * freio;
+      lampFis.z += lampFis.vz * dt;
+      lampFis.x += lampFis.vx * dt;
+
+      // uma corrente de ar de nada, para ela nunca ficar parada de vez
+      lampFis.vz += Math.sin(t * 0.37) * 0.0022;
+      lampFis.vx += Math.cos(t * 0.29) * 0.0014;
     }
+
+    lampPivot.rotation.z = lampFis.z;
+    lampPivot.rotation.x = lampFis.x;
 
     // Mau contato: de tempos em tempos a luz pisca algumas vezes seguidas.
     let falha = 1;
@@ -1746,7 +1777,9 @@ function animate() {
     // luz que havia antes em volta do corpo ficava feio e sujava a cena.
     const sm = s.body.userData.shirtMat;
     if (sm) {
-      const alvo = s.isCurrent ? 0.45 + Math.sin(t * 3.4) * 0.35 : 0;
+      const forca = aj("roupaForca", 0.8);
+      const vel = aj("roupaVel", 3.4);
+      const alvo = s.isCurrent ? forca * (0.55 + Math.sin(t * vel) * 0.45) : 0;
       sm.emissive.copy(s.body.userData.shirtColor);
       sm.emissiveIntensity += (alvo - sm.emissiveIntensity) * 0.14;
     }
@@ -1885,17 +1918,11 @@ function animate() {
       nose.position.z = 0.163 + cresc * 0.26;
     }
 
-    // ao bater palma, a carta desce para a mesa
-    if (s.hand) {
-      const down = (s.hand.userData.down || 0) - nowMs;
-      s.hand.position.y = down > 0 ? 1.04 : 1.2;
-      s.hand.rotation.x = down > 0 ? -1.35 : -0.28;
-    }
-
-    s.cards.forEach((c) => {
+    // batida na mesa: as cartas deitadas dão um pulinho
+    s.cards.forEach((c, i) => {
       const left = (c.userData.jump || 0) - nowMs;
-      c.position.y =
-        left > 0 ? Math.abs(Math.sin(left * 0.02)) * 0.1 * (left / 700) : 0;
+      c.position.z =
+        left > 0 ? Math.abs(Math.sin(left * 0.02)) * 0.08 * (left / 700) : i * 0.002;
     });
   }
 

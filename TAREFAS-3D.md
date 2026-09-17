@@ -145,3 +145,23 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
       da mesa antes de começar, sem cartas nem moedas, com **PRONTO / NÃO
       PRONTO** acima do personagem. A fila continua só na lista
 - [x] O8. Luz da mesa **piscando de tempos em tempos**, como mau contato
+
+## P. Mesa de verdade
+
+- [x] P1. Cartas **deitadas na mesa**, viradas para baixo — cada um vê as suas
+      pelo HUD. A mão presa à câmera saiu de cena
+- [x] P2. Barra de **tamanho do HUD** na bancada
+- [x] P3. Carta **perdida** fica virada para cima na mesa, para todos verem
+- [x] P4. As duas cartas do mesmo jogador **juntas e perto da borda**, e a
+      posição sai do tamanho da mesa (muda a mesa, as cartas acompanham)
+- [x] P5. **Moedas ao lado das cartas** do dono
+- [x] P6. Bonecos mais **na vertical**, com barra de inclinação
+- [x] P7. Lâmpada: **pêndulo de verdade** — volta pela gravidade, balança por
+      mais tempo e vai parando aos poucos
+- [x] P8. Barras de **intensidade e velocidade** da roupa que acende na vez
+- [x] P9. **Item de cabeça** no perfil (cabelo, careca, boné, cowboy) e o
+      perfil **guardado no navegador**, como nick e foto
+- [x] P10. Espaçamento **igual** em volta da mesa: 2 de frente, 3 em
+      triângulo, 4 em quadrado
+- [x] P11. Quem perde as duas cartas fica **acinzentado**
+- [x] P12. BUG: na bancada, o chat rápido fazia os bonecos sumirem e voltarem
