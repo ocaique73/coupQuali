@@ -1325,8 +1325,10 @@ export function update(state, meId, opts = {}) {
     s.body.visible = !esconderMeuCorpo;
     s.hand.visible = !esconderMeuCorpo;
     s.plate.visible = !souEu;
-    // o balão some sozinho depois do tempo
-    if (s.chatLbl.visible && (s.chatAte || 0) < performance.now())
+    // o balão some sozinho depois do tempo — e nunca fica no meu assento,
+    // mesmo que eu já tivesse um na tela quando virei "eu" (troca de aba,
+    // reconexão): ele viraria um letreiro colado na lente
+    if (souEu || (s.chatLbl.visible && (s.chatAte || 0) < performance.now()))
       s.chatLbl.visible = false;
     // Em 1ª pessoa a câmera fica DENTRO do meu próprio assento: fichas e halo
     // envolviam a lente e viravam borrões amarelos tapando a tela.
@@ -1379,7 +1381,13 @@ function popGota(seat, ms) {
 
 // Fala acima do ombro, por um tempo. Serve para o chat escrito e para o
 // texto do chat rápido ("Mentira!", "Nice!", "filha da puta"...).
+//
+// O MEU balão nunca aparece para mim. O sprite fica no meu assento, que em
+// 1ª pessoa é onde está a câmera: as letras colavam na lente e tapavam a
+// tela inteira toda vez que eu mandava um chat rápido. No 2D continua
+// aparecendo, porque lá o balão fica ao lado do card e não atrapalha.
 export function speak(pid, txt, ms = 3200) {
+  if (pid === myId) return;
   const s = seats.get(pid);
   if (!s || !txt) return;
   s.chatLbl.userData.redraw(txt.slice(0, 26), "#ffffff", "rgba(10,16,26,.92)");

@@ -2518,7 +2518,9 @@ h2 {
   transition:
     opacity 0.25s ease,
     transform 0.25s ease;
-  z-index: 6;
+  /* Acima do HUD (20): o balão de quem senta embaixo cai justamente onde o
+     HUD fica, e sumia por baixo dele. */
+  z-index: 25;
 }
 .seatChat.on {
   opacity: 1;
@@ -3080,7 +3082,7 @@ body[data-theme="qualitas"] .lookBtn {
   left: 10px;
   bottom: 10px;
   z-index: 20;
-  width: 146px;
+  width: 176px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -3142,8 +3144,8 @@ body[data-theme="qualitas"] .lookBtn {
 }
 .meCard {
   position: relative;
-  width: 44px;
-  height: 61px;
+  width: 68px;
+  height: 94px;
   border-radius: 6px;
   overflow: hidden;
   background: #05080d;
@@ -3166,7 +3168,7 @@ body[data-theme="qualitas"] .lookBtn {
 }
 .meBack {
   font-weight: 900;
-  font-size: 15px;
+  font-size: 20px;
   color: #3a4d6d;
 }
 .meCard span:not(.meBack) {
@@ -3174,7 +3176,7 @@ body[data-theme="qualitas"] .lookBtn {
   z-index: 2;
   width: 100%;
   text-align: center;
-  font-size: 7px;
+  font-size: 8.5px;
   font-weight: 900;
   text-transform: uppercase;
   padding: 2px 0;
@@ -3199,12 +3201,12 @@ body[data-theme="qualitas"] .lookBtn {
 
 @media (max-width: 1200px) {
   .meHud {
-    width: 126px;
+    width: 148px;
     padding: 6px;
   }
   .meCard {
-    width: 34px;
-    height: 47px;
+    width: 56px;
+    height: 78px;
   }
 }
 
@@ -3267,19 +3269,4 @@ body[data-theme="qualitas"] .lookBtn {
     font-size: 12px;
     padding: 8px 9px;
   }
-}
-
-/* M8 — o HUD acompanha o visual escolhido */
-.meHud.semCartas .meCards {
-  display: none;
-}
-.meHud.cartasGrandes {
-  width: 188px;
-}
-.meHud.cartasGrandes .meCard {
-  width: 62px;
-  height: 86px;
-}
-.meHud.cartasGrandes .meCard span:not(.meBack) {
-  font-size: 8.5px;
 }

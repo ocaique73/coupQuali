@@ -1791,9 +1791,12 @@ function renderTable() {
     // assentos da metade direita jogam o badge para o lado de dentro,
     // senão ele sairia da mesa
     s.root.classList.toggle("badgeLeft", pos[i].x > 50);
-    // o balão de fala fica à esquerda do card; nos assentos da metade
-    // esquerda ele iria para fora da mesa, então vira para dentro
-    s.root.classList.toggle("chatRight", pos[i].x < 50);
+    // O balão de fala fica à esquerda do card. Vira para a direita em dois
+    // casos: assentos da metade esquerda (senão sairia da mesa) e assentos
+    // de baixo, porque à esquerda deles fica o HUD com os meus dados — e o
+    // HUD está num contexto de empilhamento que o balão não consegue vencer
+    // só com z-index.
+    s.root.classList.toggle("chatRight", pos[i].x < 50 || pos[i].y > 70);
 
     // cor própria de cada jogador (contorno do card)
     const col = `var(--pc${(p.color ?? 0) % 6})`;
@@ -2013,14 +2016,8 @@ function renderMeHud() {
   }
   els.meHud.classList.remove("hidden");
 
-  // 3D em 1ª pessoa: as cartas ficam na minha mão, na cena; repeti-las no
-  // HUD só rouba espaço. Em 3ª pessoa elas ficam longe, então aumentam.
-  const v = window.COUP3D?.view?.() || { mode: "2d", cam: "first" };
-  const primeira3d = v.mode === "3d" && v.cam === "first";
-  const terceira3d = v.mode === "3d" && v.cam === "third";
-
   const sig = [
-    m.nick, m.coins, m.avatar || "", m.color, v.mode, v.cam,
+    m.nick, m.coins, m.avatar || "", m.color,
     (m.hand || []).map((c) => (c.role || "?") + "|" + c.alive).join(","),
     hideMyCards, state.currentPlayerId === myId, UI.theme,
   ].join("|");
@@ -2036,9 +2033,6 @@ function renderMeHud() {
   els.meNick.textContent = m.nick;
   els.meCoins.innerHTML = coinStackHTML(m.coins);
   els.meCoinsN.textContent = String(m.coins);
-
-  els.meHud.classList.toggle("semCartas", primeira3d);
-  els.meHud.classList.toggle("cartasGrandes", terceira3d);
 
   els.meCards.innerHTML = "";
   for (const c of m.hand || []) {

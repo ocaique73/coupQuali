@@ -108,7 +108,15 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
   - [x] mentira: livre (escolhido: **nariz cresce**)
   - [x] bater na mesa e palmas: já estão bons
 - [x] M7. Tempo ao lado do nome **só na vez** do jogador
-- [x] M8. HUD: cartas **maiores** no 3D em 3ª pessoa; em **1ª pessoa sem
-      cartas** no HUD (já aparecem na mão), só o resto das informações
+- [x] M8. HUD: cartas **maiores**. Revisto depois de ver rodando: ficam
+      **fixas**, do mesmo tamanho nos dois visuais e nas duas câmeras —
+      esconder no 3D em 1ª pessoa não compensou
 - [x] M9. Girar a câmera **só em 3ª pessoa**: em 1ª pessoa parece que eu troquei
       de lugar na mesa
+
+## N. Ajustes de leitura
+
+- [x] N1. No **3D** eu não vejo o meu próprio balão de fala: ele mora no meu
+      assento, que em 1ª pessoa é onde está a câmera, e as letras tapavam a
+      tela. No **2D fica como estava**
+- [x] N2. Cartas do HUD **fixas e maiores**

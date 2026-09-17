@@ -234,10 +234,6 @@
     },
 
     isOn: () => mode === "3d" && !failed && !!scene,
-
-    // o HUD do cliente muda conforme o visual: em 1ª pessoa as cartas já
-    // estão na mão do jogador e não precisam ser repetidas
-    view: () => ({ mode: failed ? "2d" : mode, cam }),
   };
 
   addEventListener("resize", () => scene && scene.resize());
