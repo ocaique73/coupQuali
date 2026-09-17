@@ -50,6 +50,10 @@ const els = {
   cancelTargetBtn: document.getElementById("cancelTargetBtn"),
 
   respHud: document.getElementById("respHud"),
+  helpBtn: document.getElementById("helpBtn"),
+  helpModal: document.getElementById("helpModal"),
+  helpClose: document.getElementById("helpClose"),
+  logToggle: document.getElementById("logToggle"),
   respTimer: document.getElementById("respTimer"),
   reactionBox: document.getElementById("reactionBox"),
   pendingText: document.getElementById("pendingText"),
@@ -276,7 +280,7 @@ socket.on("me", ({ pid }) => {
   if (pid) myId = pid;
 });
 
-socket.on("state", (s) => {
+function aplicarEstado(s) {
   const prev = state;
   state = s;
   renderAll();
@@ -284,7 +288,12 @@ socket.on("state", (s) => {
   push3D();
   // depois do render: os retângulos usados pelas animações já estão corretos
   consumeEvents(s.events, prev);
-});
+}
+socket.on("state", aplicarEstado);
+
+// A bancada de ajustes (/teste) desenha a mesa sem servidor: ela monta um
+// estado de mentira e o empurra por aqui, pelo mesmo caminho de sempre.
+window.__coupAplicarEstado = aplicarEstado;
 
 /* ------------------------------------------------------------------ */
 /* helpers de estado                                                    */
@@ -301,6 +310,27 @@ function isMyTurn() {
     state?.started && state.phase === "turn" && state.currentPlayerId === myId
   );
 }
+// Quem a mesa desenha. Com a partida rolando é quem está em jogo; antes de
+// começar é quem está sentado, para a sala não ser uma mesa vazia enquanto
+// todo mundo espera. No lobby ninguém tem carta nem moeda — só o aviso de
+// pronto. Quem está na FILA não entra: continua só na lista da esquerda.
+function mesaPlayers() {
+  if (state?.started) return state.playersInGame || [];
+  return (state?.roomPlayers || []).map((p) => ({
+    id: p.id,
+    nick: p.nick,
+    avatar: p.avatar || null,
+    color: p.color ?? 0,
+    look: p.look || null,
+    connected: p.connected !== false,
+    coins: null, // null = nem mostra
+    aliveCount: 2, // ninguém está eliminado no lobby
+    hand: [],
+    lobby: true,
+    ready: !!p.ready,
+  }));
+}
+
 function aliveOpponents() {
   return (state?.playersInGame || []).filter(
     (p) => p.id !== myId && p.connected && p.aliveCount > 0,
@@ -991,6 +1021,30 @@ els.readyBtn.onclick = () => socket.emit("toggle_ready");
 els.startBtn.onclick = () => socket.emit("start");
 els.restartBtn.onclick = () => socket.emit("restart");
 
+// Regras e cartas do jogo: consulta rápida, não painel fixo.
+const abrirAjuda = (abrir) =>
+  els.helpModal.classList.toggle("hidden", !abrir);
+els.helpBtn.onclick = () => abrirAjuda(els.helpModal.classList.contains("hidden"));
+els.helpClose.onclick = () => abrirAjuda(false);
+els.helpModal.onclick = (e) => {
+  if (e.target === els.helpModal) abrirAjuda(false);
+};
+
+// O log é útil mas come a coluna toda; fica encolhido se o jogador quiser.
+// A escolha vale para as próximas partidas.
+let logEscondido = localStorage.getItem("coup.logOff") === "1";
+function aplicarLog() {
+  els.log.classList.toggle("hidden", logEscondido);
+  els.logToggle.textContent = logEscondido ? "+" : "–";
+  els.logToggle.title = logEscondido ? "Mostrar o log" : "Esconder o log";
+}
+els.logToggle.onclick = () => {
+  logEscondido = !logEscondido;
+  store(localStorage, "coup.logOff", logEscondido ? "1" : "0");
+  aplicarLog();
+};
+aplicarLog();
+
 els.eyeBtn.onclick = () => {
   hideMyCards = !hideMyCards;
   els.eyeBtn.textContent = hideMyCards ? "🙈" : "👁️";
@@ -1009,7 +1063,11 @@ function push3D() {
     targeting && actionAvailability(targeting).ok
       ? new Set(aliveOpponents().map((p) => p.id))
       : null;
-  window.COUP3D?.onState(state, myId, { targets, hideCards: hideMyCards });
+  window.COUP3D?.onState(state, myId, {
+    targets,
+    hideCards: hideMyCards,
+    mesa: mesaPlayers(),
+  });
 }
 
 // clicar no personagem no 3D escolhe o alvo, igual clicar no card no 2D.
@@ -1061,6 +1119,8 @@ els.winnerBackBtn.onclick = () => closeWinner();
 function closeWinner() {
   dismissedWinnerTs = state?.winner?.ts || Date.now();
   els.winnerOverlay.classList.add("hidden");
+  els.winnerOverlay.classList.remove("ancorada");
+  window.COUP3D?.vencedor?.(null);
   FX.stopConfetti(els.confettiLayer);
 }
 
@@ -1103,8 +1163,11 @@ function pickTarget(playerId) {
 function actionAvailability(a) {
   const m = me();
 
-  if (!m) return { ok: false, why: "Você está na fila desta partida" };
+  // A ordem importa: antes de começar ninguém está em playersInGame, então
+  // checar "está na fila" primeiro fazia a sala inteira ler que estava na
+  // fila enquanto esperava o início.
   if (!state.started) return { ok: false, why: "A partida ainda não começou" };
+  if (!m) return { ok: false, why: "Você está na fila desta partida" };
   if (m.aliveCount <= 0) return { ok: false, why: "Você foi eliminado" };
 
   if (state.phase !== "turn")
@@ -1751,7 +1814,7 @@ function seatResponseBadge(p) {
 }
 
 function renderTable() {
-  const players = (state?.playersInGame || []).slice(0, 6);
+  const players = mesaPlayers().slice(0, 6);
   const ids = new Set(players.map((p) => p.id));
 
   // remove assentos de quem saiu
@@ -1829,10 +1892,13 @@ function renderTable() {
     if (s.nick.textContent !== p.nick) s.nick.textContent = p.nick;
     updateAvatar(s, p);
 
-    if (s.coins.textContent !== String(p.coins))
-      s.coins.textContent = String(p.coins);
-    updateCoinStack(s, p.coins);
-    s.money.classList.toggle("rich", p.coins >= 10);
+    s.root.classList.toggle("noLobby", !!p.lobby);
+    if (!p.lobby) {
+      if (s.coins.textContent !== String(p.coins))
+        s.coins.textContent = String(p.coins);
+      updateCoinStack(s, p.coins);
+      s.money.classList.toggle("rich", p.coins >= 10);
+    }
 
     // destaque de quem ataca e quem recebe
     const role = seatActionRole(p);
@@ -1848,7 +1914,11 @@ function renderTable() {
       s.roleTag.dataset.t = "";
     }
 
-    const badge = seatResponseBadge(p);
+    const badge = p.lobby
+      ? p.ready
+        ? { t: "PRONTO", c: "ok" }
+        : { t: "NÃO PRONTO", c: "wait" }
+      : seatResponseBadge(p);
     const wasHidden = s.badge.classList.contains("hidden");
     s.badge.classList.toggle("hidden", !badge);
     if (badge) {
@@ -2058,6 +2128,8 @@ function renderWinner() {
   if (!fresh || w.ts === dismissedWinnerTs) {
     if (!els.winnerOverlay.classList.contains("hidden")) {
       els.winnerOverlay.classList.add("hidden");
+      els.winnerOverlay.classList.remove("ancorada");
+      window.COUP3D?.vencedor?.(null);
       FX.stopConfetti(els.confettiLayer);
     }
     return;
@@ -2068,7 +2140,41 @@ function renderWinner() {
   els.winnerName.textContent = w.nick;
   els.winnerOverlay.classList.toggle("isMe", w.playerId === myId);
   els.winnerOverlay.classList.remove("hidden");
+  posicionarVencedor();
   FX.confetti(els.confettiLayer, 110);
+}
+
+// Põe o cartão de vitória e o confete em cima de quem ganhou. No 3D a posição
+// vem da projeção do boneco na tela (a câmera está se movendo até ele); no 2D,
+// do card dele na mesa. Sem achar nenhum dos dois, o cartão fica no meio, que
+// é como era antes.
+function posicionarVencedor() {
+  const w = state?.winner;
+  if (!w || els.winnerOverlay.classList.contains("hidden")) return;
+
+  // Repetido a cada quadro de propósito: se a cena 3D ainda estava
+  // carregando quando a partida acabou, uma chamada única se perdia e a
+  // câmera nunca ia para o vencedor.
+  window.COUP3D?.vencedor?.(w.playerId);
+
+  let ponto = window.COUP3D?.telaDe?.(w.playerId) || null;
+  if (!ponto) {
+    const card = seatEls.get(w.playerId)?.root;
+    if (card) {
+      const r = card.getBoundingClientRect();
+      ponto = { x: r.left + r.width / 2, y: r.top };
+    }
+  }
+
+  els.winnerOverlay.classList.toggle("ancorada", !!ponto);
+  if (!ponto) return;
+
+  // O cartão sobe acima da cabeça; sem prender, quem ganha lá no fundo da
+  // mesa empurrava o cartão para fora da tela.
+  const cx = Math.max(150, Math.min(innerWidth - 150, ponto.x));
+  const cy = Math.max(190, Math.min(innerHeight - 40, ponto.y));
+  els.winnerOverlay.style.setProperty("--wx", Math.round(cx) + "px");
+  els.winnerOverlay.style.setProperty("--wy", Math.round(cy) + "px");
 }
 
 function renderAll() {
@@ -2094,6 +2200,7 @@ function renderAll() {
   renderLog();
   renderDiscard();
   renderMeHud();
+  posicionarVencedor();
   renderLossModal();
   renderExchangeModal();
   renderPause();

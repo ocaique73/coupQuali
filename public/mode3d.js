@@ -78,6 +78,7 @@
       hideCards: !!window.__coupHide,
       thirdPerson: cam === "third",
       targets: window.__coupTargets || null,
+      mesa: window.__coupMesa || null,
     };
   }
 
@@ -179,6 +180,7 @@
       if (extra) {
         window.__coupTargets = extra.targets || null;
         window.__coupHide = !!extra.hideCards;
+        window.__coupMesa = extra.mesa || null;
       }
       renderPicker();
 
@@ -234,6 +236,39 @@
     },
 
     isOn: () => mode === "3d" && !failed && !!scene,
+
+    // a bancada de ajustes força o 3D, que é o que ela existe para acertar
+    setMode,
+
+    // vitória: a câmera vai para o vencedor e o cartão fica sobre ele
+    vencedor(pid) {
+      if (mode === "3d" && scene) {
+        try {
+          scene.vencedor(pid);
+        } catch (e) {
+          console.error("[3D]", e);
+        }
+      }
+    },
+    telaDe(pid) {
+      if (mode !== "3d" || !scene) return null;
+      try {
+        return scene.telaDe(pid);
+      } catch {
+        return null;
+      }
+    },
+
+    // a bancada mexeu num número: a cena refaz mesa, lâmpada e assentos
+    tune() {
+      if (scene) {
+        try {
+          scene.tune();
+        } catch (e) {
+          console.error("[3D]", e);
+        }
+      }
+    },
   };
 
   addEventListener("resize", () => scene && scene.resize());

@@ -22,8 +22,9 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, "public")));
 
-// qualquer código de sala de 1 a 4 caracteres serve a mesma página
-app.get(/^\/([A-Za-z0-9]{1,4})?$/, (req, res) => {
+// Qualquer codigo de sala serve a mesma pagina. Ate 16 caracteres porque
+// /teste — a bancada de ajustes do 3D — nao cabia no limite antigo de 4.
+app.get(/^\/([A-Za-z0-9]{1,16})?$/, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 

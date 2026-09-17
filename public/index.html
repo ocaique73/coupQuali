@@ -14,6 +14,14 @@
       <div class="timer" id="timer"></div>
 
       <button
+        id="helpBtn"
+        class="btn small"
+        title="Regras e cartas do jogo"
+      >
+        ?
+      </button>
+
+      <button
         id="eyeBtn"
         class="btn small"
         title="Esconder/mostrar suas cartas"
@@ -79,7 +87,12 @@
           <div class="chatCount"><span id="chatLeft">150</span> restantes</div>
         </div>
 
-        <h2>Log</h2>
+        <h2 class="comBotao">
+          Log
+          <button id="logToggle" class="btn tiny" title="Esconder o log">
+            –
+          </button>
+        </h2>
         <div id="log" class="log"></div>
       </div>
 
@@ -238,12 +251,19 @@
 
         <div id="actions" class="actions"></div>
 
-        <h2>Cartas do jogo</h2>
-        <div id="roleGuide" class="roleGuide"></div>
-
         <h2>Descarte</h2>
         <div id="discard" class="discard"></div>
+      </div>
+    </div>
 
+    <!-- Modal: responder à ação / ao bloqueio -->
+    <!-- Regras e cartas do jogo. Saíram do painel direito: são consulta
+         rápida, não algo para ficar ocupando a tela a partida inteira. -->
+    <div id="helpModal" class="modal hidden">
+      <div class="modalCard helpCard">
+        <button id="helpClose" class="btn small helpX" title="Fechar">
+          ✕
+        </button>
         <h2>Regras rápidas</h2>
         <div class="rules">
           <p>
@@ -254,10 +274,12 @@
             Assassinato; Capitão/Embaixador bloqueia Roubo.
           </p>
         </div>
+
+        <h2>Cartas do jogo</h2>
+        <div id="roleGuide" class="roleGuide"></div>
       </div>
     </div>
 
-    <!-- Modal: responder à ação / ao bloqueio -->
     <!-- Modal: editar nick e foto (só fora de partida) -->
     <div id="profileModal" class="modal hidden">
       <div class="modalCard profileCard">
@@ -380,10 +402,14 @@
     </script>
 
     <script src="/socket.io/socket.io.js"></script>
+    <!-- os numeros da cena 3D: precisa vir antes de quem os le -->
+    <script src="/ajustes3d.js"></script>
     <script src="/ui.js"></script>
     <script src="/fx.js"></script>
     <script src="/client.js"></script>
     <script src="/mode3d.js"></script>
     <script src="/lookeditor.js"></script>
+    <!-- bancada de ajustes: so faz alguma coisa em /teste -->
+    <script src="/bancada.js"></script>
   </body>
 </html>

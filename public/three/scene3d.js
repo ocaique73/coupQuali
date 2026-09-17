@@ -23,8 +23,9 @@ const THEME_TABLE = {
 
 let renderer, scene, camera, clock, myHand;
 let container = null;
-let lampPivot, lampLight, bounceLight;
-let table, tableTop, tableRim, deckMesh;
+let lampPivot, lampLight, bounceLight, ambLight;
+let lampCord, lampBody, lampShade, lampBulb;
+let table, tableTop, tableRim, tableBase, deckMesh, bankGroup;
 let raf = 0;
 let disposed = false;
 let onPickTarget = null;
@@ -38,12 +39,30 @@ let theme = "politica";
 let hideCards = false;
 let thirdPerson = false;
 let targets = null; // Set de ids clicáveis, ou null
+let vencedorId = null; // enquanto dura a comemoração, a câmera fica nele
 let hovered = null;
 
 const shakeUntil = { t: 0 };
 const lampKick = { t: 0 };
+// Empurrar a lâmpada com a mão: enquanto está segura ela obedece ao ponteiro,
+// e ao soltar volta a balançar sozinha a partir do ângulo onde parou.
+const lampDrag = { ativo: false, x: 0, z: 0, lx: 0, ly: 0, fase: 0 };
+const LAMP_MAX = 0.55; // até onde dá para empurrar, em radianos
 const flying = []; // moedas/cartas em movimento pela mesa
 const pops = []; // símbolos de gesto subindo acima do jogador
+
+// Um número da bancada (public/ajustes3d.js). Se a bancada não carregou,
+// cai no valor de reserva e a cena monta igual — nada aqui pode depender
+// dela para funcionar.
+function aj(k, reserva) {
+  const v = window.AJUSTES3D?.get(k);
+  return typeof v === "number" && isFinite(v) ? v : reserva;
+}
+
+// a superfície onde as cartas e as fichas encostam
+function tampo() {
+  return aj("mesaAltura", 0.92) + aj("mesaEspessura", 0.16) / 2;
+}
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -141,19 +160,25 @@ function makePlate() {
   tex.colorSpace = THREE.SRGBColorSpace;
 
   let foto = null;
-  let dados = { nick: "", coins: 0, cor: "#ffffff" };
+  let dados = { nick: "", coins: 0, cor: "#ffffff", etiqueta: null };
 
   function draw() {
-    const { nick, coins, cor } = dados;
+    const { nick, coins, cor, etiqueta } = dados;
     g.clearRect(0, 0, c.width, c.height);
 
     g.font = "bold 70px system-ui, sans-serif";
     const wNick = g.measureText(nick).width;
     g.font = "bold 62px system-ui, sans-serif";
     const wMoedas = g.measureText(String(coins)).width;
+    g.font = "bold 46px system-ui, sans-serif";
+    const wEtiq = etiqueta ? g.measureText(etiqueta).width : 0;
 
     const rFoto = 56;
-    const larg = (foto ? rFoto * 2 + 20 : 0) + wNick + 24 + 52 + wMoedas;
+    const larg =
+      (foto ? rFoto * 2 + 20 : 0) +
+      wNick +
+      24 +
+      (etiqueta ? wEtiq + 10 : 52 + wMoedas);
     let x = (c.width - larg) / 2;
     const cy = c.height / 2;
 
@@ -191,19 +216,26 @@ function makePlate() {
     g.fillText(nick, x, cy);
     x += wNick + 24;
 
-    // moeda desenhada à mão: emoji de moeda não existe em toda fonte
-    g.beginPath();
-    g.arc(x + 21, cy, 21, 0, Math.PI * 2);
-    g.fillStyle = "#ffd400";
-    g.fill();
-    g.lineWidth = 5;
-    g.strokeStyle = "#8a6b00";
-    g.stroke();
-    x += 52;
+    if (etiqueta) {
+      // antes de começar não há moeda: o lugar dela é o aviso de pronto
+      g.font = "bold 46px system-ui, sans-serif";
+      g.fillStyle = etiqueta === "PRONTO" ? "#2dd36f" : "#8b97a8";
+      g.fillText(etiqueta, x, cy + 2);
+    } else {
+      // moeda desenhada à mão: emoji de moeda não existe em toda fonte
+      g.beginPath();
+      g.arc(x + 21, cy, 21, 0, Math.PI * 2);
+      g.fillStyle = "#ffd400";
+      g.fill();
+      g.lineWidth = 5;
+      g.strokeStyle = "#8a6b00";
+      g.stroke();
+      x += 52;
 
-    g.font = "bold 62px system-ui, sans-serif";
-    g.fillStyle = "#ffd400";
-    g.fillText(String(coins), x, cy);
+      g.font = "bold 62px system-ui, sans-serif";
+      g.fillStyle = "#ffd400";
+      g.fillText(String(coins), x, cy);
+    }
 
     tex.needsUpdate = true;
   }
@@ -213,8 +245,8 @@ function makePlate() {
   );
   spr.scale.set(2.35, 0.54, 1);
 
-  spr.userData.set = (nick, coins, cor) => {
-    dados = { nick, coins, cor };
+  spr.userData.set = (nick, coins, cor, etiqueta) => {
+    dados = { nick, coins, cor, etiqueta: etiqueta || null };
     draw();
   };
   // A foto pode nunca chegar (link quebrado, servidor sem CORS). Se falhar,
@@ -261,44 +293,40 @@ function buildRoom() {
 
   table = new THREE.Group();
   tableTop = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.05, 2.05, 0.16, 64),
+    new THREE.CylinderGeometry(1, 1, 1, 64),
     new THREE.MeshStandardMaterial({
       color: THEME_TABLE.politica.felt,
       roughness: 0.95,
     }),
   );
-  tableTop.position.y = 0.92;
   tableTop.receiveShadow = true;
   table.add(tableTop);
 
   tableRim = new THREE.Mesh(
-    new THREE.TorusGeometry(2.07, 0.09, 16, 64),
+    new THREE.TorusGeometry(1, 0.09, 16, 64),
     new THREE.MeshStandardMaterial({
       color: THEME_TABLE.politica.rim,
       roughness: 0.6,
     }),
   );
   tableRim.rotation.x = Math.PI / 2;
-  tableRim.position.y = 0.95;
   table.add(tableRim);
 
-  const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.4, 0.7, 0.9, 24),
+  tableBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4, 0.7, 1, 24),
     new THREE.MeshStandardMaterial({ color: 0x2a1c10, roughness: 0.8 }),
   );
-  base.position.y = 0.45;
-  table.add(base);
+  table.add(tableBase);
   scene.add(table);
 
   deckMesh = new THREE.Mesh(
     new THREE.BoxGeometry(0.3, 0.12, 0.44),
     new THREE.MeshStandardMaterial({ color: 0x14203a, roughness: 0.7 }),
   );
-  deckMesh.position.set(-0.32, 1.06, 0.1);
   deckMesh.castShadow = true;
   table.add(deckMesh);
 
-  const bank = new THREE.Group();
+  bankGroup = new THREE.Group();
   for (let i = 0; i < 5; i++) {
     const chip = new THREE.Mesh(
       new THREE.CylinderGeometry(0.1, 0.1, 0.025, 20),
@@ -308,46 +336,69 @@ function buildRoom() {
         metalness: 0.65,
       }),
     );
-    chip.position.set(0.32, 1.02 + i * 0.026, 0.1);
-    bank.add(chip);
+    chip.position.set(0.32, i * 0.026, 0.1);
+    bankGroup.add(chip);
   }
-  table.add(bank);
+  table.add(bankGroup);
+
+  ajustarMesa();
+}
+
+// Tudo que depende do tamanho ou da altura da mesa fica aqui, para poder ser
+// refeito quando a bancada mexe nos números.
+function ajustarMesa() {
+  if (!tableTop) return;
+  const r = aj("mesaRaio", 2.05);
+  const esp = aj("mesaEspessura", 0.16);
+  const h = aj("mesaAltura", 0.92);
+  const sup = tampo();
+
+  tableTop.scale.set(r, esp, r);
+  tableTop.position.y = h;
+
+  tableRim.scale.set(r + 0.02, r + 0.02, 1);
+  tableRim.position.y = h + 0.03;
+
+  tableBase.scale.set(1, h + 0.02, 1);
+  tableBase.position.y = (h + 0.02) / 2;
+
+  deckMesh.position.set(-0.32, sup + 0.06, 0.1);
+  bankGroup.position.y = sup + 0.02;
 }
 
 function buildLamp() {
   lampPivot = new THREE.Group();
-  lampPivot.position.set(0, 4.4, 0);
   scene.add(lampPivot);
 
-  const cord = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.012, 0.012, 1.5, 6),
+  lampCord = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, 1, 6),
     new THREE.MeshBasicMaterial({ color: 0x0a0a0a }),
   );
-  cord.position.y = -0.75;
-  lampPivot.add(cord);
+  lampPivot.add(lampCord);
 
   const lamp = new THREE.Group();
-  lamp.position.y = -1.5;
+  lampBody = lamp;
 
-  const shade = new THREE.Mesh(
-    new THREE.ConeGeometry(0.45, 0.4, 24, 1, true),
+  // Cone SEM girar: o vértice fica em cima, onde o fio prende, e a boca
+  // larga embaixo, jogando luz na mesa. Estava girado meia volta, o que
+  // deixava o abajur de cabeça para baixo — funil abrindo para o teto.
+  lampShade = new THREE.Mesh(
+    new THREE.ConeGeometry(1, 1, 24, 1, true),
     new THREE.MeshStandardMaterial({
       color: 0x2b2b30,
       roughness: 0.7,
       side: THREE.DoubleSide,
     }),
   );
-  shade.rotation.x = Math.PI;
-  shade.userData.clickable = "lamp";
-  lamp.add(shade);
+  lampShade.userData.clickable = "lamp";
+  lamp.add(lampShade);
 
-  const bulb = new THREE.Mesh(
+  lampBulb = new THREE.Mesh(
     new THREE.SphereGeometry(0.09, 16, 12),
     new THREE.MeshBasicMaterial({ color: 0xffd9a0 }),
   );
-  bulb.position.y = -0.14;
-  bulb.userData.clickable = "lamp";
-  lamp.add(bulb);
+  lampBulb.userData.clickable = "lamp";
+  lamp.add(lampBulb);
 
   // Luz baixa: acende a mesa e deixa o resto da sala no escuro.
   lampLight = new THREE.SpotLight(0xffc987, 42, 14, Math.PI / 3.4, 0.62, 1.3);
@@ -362,13 +413,38 @@ function buildLamp() {
 
   // O feltro devolve luz para cima e acende os rostos de baixo.
   bounceLight = new THREE.PointLight(0xffb870, 13, 7, 2);
-  bounceLight.position.set(0, 1.35, 0);
   scene.add(bounceLight);
 
-  scene.add(new THREE.AmbientLight(0x3a3355, 1.0));
+  ambLight = new THREE.AmbientLight(0x3a3355, 1.0);
+  scene.add(ambLight);
   const fill = new THREE.PointLight(0x5a4a80, 8, 16);
   fill.position.set(0, 3.4, 0);
   scene.add(fill);
+
+  ajustarLampada();
+}
+
+function ajustarLampada() {
+  if (!lampPivot) return;
+  const teto = aj("lampadaAltura", 4.4);
+  const fio = aj("lampadaFio", 1.5);
+  const raio = aj("lampadaAbajur", 0.45);
+
+  lampPivot.position.set(0, teto, 0);
+  lampCord.scale.set(1, fio, 1);
+  lampCord.position.y = -fio / 2;
+  lampBody.position.y = -fio;
+
+  // Abajur mais largo do que alto, como um pendente de verdade. O vértice
+  // encosta na ponta do fio e a boca larga fica embaixo.
+  const altura = raio * 0.85;
+  lampShade.scale.set(raio, altura, raio);
+  lampShade.position.y = -altura / 2;
+  lampBulb.position.y = -altura * 0.8;
+
+  lampLight.distance = aj("luzAlcance", 14);
+  bounceLight.position.y = tampo() + 0.43;
+  ambLight.intensity = aj("luzAmbiente", 1.0);
 }
 
 function applyTheme(t) {
@@ -710,15 +786,31 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
 // O jogador local fica no ângulo 0 e os outros se espalham pelo ARCO OPOSTO:
 // num círculo completo, quem estivesse a 90° ficaria ao lado da câmera e
 // nunca apareceria na tela.
-const SEAT_R = 2.62;
-const FAR_ARC = Math.PI * 0.55;
-
 function seatAngle(idx, total) {
   if (idx === 0) return 0;
   const k = total - 1;
   if (k <= 1) return Math.PI;
+  const arco = Math.PI * aj("bonecoArco", 0.55);
   const t = (idx - 1) / (k - 1);
-  return Math.PI - FAR_ARC / 2 + t * FAR_ARC;
+  return Math.PI - arco / 2 + t * arco;
+}
+
+// Reposiciona e redimensiona os bonecos. Chamado ao montar cada assento e
+// toda vez que a bancada mexe num número.
+function ajustarAssentos() {
+  const r = aj("assentoRaio", 2.62);
+  const esc = aj("bonecoEscala", 1);
+  const alt = aj("bonecoAltura", 0);
+  for (const [, st] of seats) {
+    const ang = seatAngle(st.idx, st.total ?? seats.size);
+    st.ang = ang;
+    st.group.position.set(Math.sin(ang) * r, 0, Math.cos(ang) * r);
+    st.group.lookAt(0, 1, 0);
+    st.escala = esc;
+    st.alturaBase = alt;
+    st.body.scale.setScalar(esc);
+    st.body.position.y = alt;
+  }
 }
 
 function lookSig(p) {
@@ -729,10 +821,16 @@ function lookSig(p) {
 function buildSeat(p, idx, total) {
   const g = new THREE.Group();
   const ang = seatAngle(idx, total);
-  g.position.set(Math.sin(ang) * SEAT_R, 0, Math.cos(ang) * SEAT_R);
+  const r = aj("assentoRaio", 2.62);
+  g.position.set(Math.sin(ang) * r, 0, Math.cos(ang) * r);
   g.lookAt(0, 1, 0);
 
-  const refs = { group: g, ang, idx, sig: "", lookSig: "", chipsN: -1 };
+  const refs = {
+    group: g, ang, idx, total,
+    sig: "", lookSig: "", chipsN: -1,
+    escala: aj("bonecoEscala", 1),
+    alturaBase: aj("bonecoAltura", 0),
+  };
 
   refs.body = buildCharacter({
     color: p.color ?? 0,
@@ -740,6 +838,8 @@ function buildSeat(p, idx, total) {
     seed: idx,
   });
   refs.lookSig = lookSig(p);
+  refs.body.scale.setScalar(refs.escala);
+  refs.body.position.y = refs.alturaBase;
   g.add(refs.body);
 
   // as cartas ficam na MÃO ESQUERDA, para a direita sobrar para os gestos
@@ -1054,6 +1154,17 @@ function onPointerMove(e) {
   pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1;
   pointer.y = -((e.clientY - r.top) / r.height) * 2 + 1;
 
+  if (lampDrag.ativo) {
+    const dx = e.clientX - lampDrag.lx;
+    const dy = e.clientY - lampDrag.ly;
+    lampDrag.lx = e.clientX;
+    lampDrag.ly = e.clientY;
+    const lim = (v) => Math.max(-LAMP_MAX, Math.min(LAMP_MAX, v));
+    lampDrag.z = lim(lampDrag.z - dx * 0.004);
+    lampDrag.x = lim(lampDrag.x + dy * 0.004);
+    return;
+  }
+
   if (orbit.dragging) {
     const dx = e.clientX - orbit.lx;
     const dy = e.clientY - orbit.ly;
@@ -1067,6 +1178,19 @@ function onPointerMove(e) {
 }
 
 function onPointerDown(e) {
+  onPointerMove(e);
+
+  // A lâmpada vem antes do giro, e vale nas duas câmeras: empurrar o abajur
+  // não é girar a mesa.
+  const hit = pick();
+  if (hit?.lamp) {
+    lampDrag.ativo = true;
+    lampDrag.lx = e.clientX;
+    lampDrag.ly = e.clientY;
+    renderer.domElement.style.cursor = "grabbing";
+    return;
+  }
+
   if (!thirdPerson) return; // em 1ª pessoa não se gira
   orbit.dragging = true;
   orbit.andou = 0;
@@ -1075,6 +1199,19 @@ function onPointerDown(e) {
 }
 
 function onPointerUp() {
+  if (lampDrag.ativo) {
+    lampDrag.ativo = false;
+    // Solta de onde estava: a fase do balanço é escolhida para o primeiro
+    // quadro livre cair no mesmo ângulo, senão a lâmpada dava um salto.
+    const amp = 0.055 + 0.2;
+    const k = Math.max(-1, Math.min(1, lampDrag.z / amp));
+    lampDrag.fase = Math.asin(k) - clock.getElapsedTime() * 2.05;
+    // quanto mais longe foi empurrada, mais forte volta
+    const forca = Math.min(1, Math.abs(lampDrag.z) / LAMP_MAX);
+    lampKick.t = performance.now() + 1200 + forca * 2400;
+    lampDrag.z = 0;
+    lampDrag.x = 0;
+  }
   orbit.dragging = false;
   renderer.domElement.style.cursor = "";
 }
@@ -1121,7 +1258,7 @@ function onClick(e) {
   if (!hit) return;
 
   if (hit.lamp) {
-    // empurra a lâmpada: balança mais forte e a luz oscila junto
+    // clique seco, sem arrastar: dá um tapa e ela balança
     lampKick.t = performance.now() + 2600;
     return;
   }
@@ -1147,7 +1284,7 @@ export function init(el, opts = {}) {
   el.appendChild(renderer.domElement);
 
   camera = new THREE.PerspectiveCamera(
-    64,
+    aj("camAbertura", 64),
     (el.clientWidth || 800) / (el.clientHeight || 600),
     0.1,
     100,
@@ -1167,6 +1304,43 @@ export function init(el, opts = {}) {
 
   clock = new THREE.Clock();
   animate();
+}
+
+// Quem ganhou. Passar null encerra a comemoração e a câmera volta.
+export function vencedor(pid) {
+  vencedorId = pid || null;
+}
+
+// Onde, na tela, está a cabeça de um jogador. Serve para o cartão de vitória
+// e o confete ficarem em cima dele, em coordenadas de página.
+export function telaDe(pid, altura = 2.15) {
+  const s = seats.get(pid);
+  if (!s || !camera || !renderer) return null;
+  const v = new THREE.Vector3(
+    s.group.position.x,
+    (s.alturaBase ?? 0) + altura,
+    s.group.position.z,
+  );
+  v.project(camera);
+  const r = renderer.domElement.getBoundingClientRect();
+  return {
+    x: r.left + ((v.x + 1) / 2) * r.width,
+    y: r.top + ((1 - v.y) / 2) * r.height,
+  };
+}
+
+// Chamado pela bancada de ajustes quando qualquer número muda.
+export function tune() {
+  if (!scene) return;
+  ajustarMesa();
+  ajustarLampada();
+  ajustarAssentos();
+  if (camera) {
+    camera.fov = aj("camAbertura", 64);
+    camera.updateProjectionMatrix();
+  }
+  // as posições de carta e ficha na mesa dependem da altura do tampo
+  for (const [, st] of seats) st.chipsN = -1;
 }
 
 export function resize() {
@@ -1196,6 +1370,26 @@ function respostaDe(state, pid) {
 // A câmera é recalculada TODO QUADRO, não só quando chega estado novo do
 // servidor: senão arrastar para girar só mexia de 250 em 250 ms, aos solavancos.
 function posicionaCamera() {
+  // Vitória: a câmera sai do meu assento e vai para a frente do vencedor,
+  // um pouco acima da mesa, olhando para o rosto dele.
+  const vc = vencedorId ? seats.get(vencedorId) : null;
+  if (vc) {
+    const p = vc.group.position;
+    const d = Math.hypot(p.x, p.z) || 1;
+    // Longe o bastante para caber o busto inteiro: a 1,5 m a câmera entrava
+    // dentro da cabeça dele.
+    const fora = 3.1;
+    camera.position.set(
+      (p.x / d) * (d + fora),
+      (vc.alturaBase ?? 0) + 2.25,
+      (p.z / d) * (d + fora),
+    );
+    camera.lookAt(p.x, (vc.alturaBase ?? 0) + 1.45, p.z);
+    // as minhas cartas ficam presas à lente e tapariam o vencedor
+    if (myHand) myHand.visible = false;
+    return;
+  }
+
   const me = seats.get(myId);
   if (!me) {
     camera.position.set(0, 4.6, 6.2);
@@ -1203,9 +1397,9 @@ function posicionaCamera() {
     return;
   }
   const p = me.group.position;
-  const k = thirdPerson ? 1.78 : 1.34;
-  const alt = thirdPerson ? 3.1 : 2.12;
-  const olha = thirdPerson ? 1.0 : 0.92;
+  const k = thirdPerson ? aj("camTercDist", 1.78) : aj("camPrimDist", 1.34);
+  const alt = thirdPerson ? aj("camTercAltura", 3.1) : aj("camPrimAltura", 2.12);
+  const olha = tampo() + (thirdPerson ? 0.08 : 0);
 
   // o arraste gira o ponto de vista em volta do centro da mesa, mas só em
   // 3ª pessoa; em 1ª a câmera fica firme no assento
@@ -1233,7 +1427,9 @@ export function update(state, meId, opts = {}) {
   thirdPerson = !!opts.thirdPerson;
   targets = opts.targets && opts.targets.size ? opts.targets : null;
 
-  const players = state?.playersInGame || [];
+  // Antes de começar, o cliente manda quem está SENTADO em vez de quem está
+  // em jogo: a mesa mostra a sala se formando, sem carta nem moeda.
+  const players = opts.mesa || state?.playersInGame || [];
   const ids = new Set(players.map((p) => p.id));
 
   for (const [id, s] of seats) {
@@ -1269,17 +1465,21 @@ export function update(state, meId, opts = {}) {
     }
 
     const cor = "#" + COLORS[(p.color ?? 0) % COLORS.length].toString(16).padStart(6, "0");
-    const placaSig = `${p.nick}|${p.coins}|${cor}`;
+    // no lobby a placa troca as moedas pelo aviso de pronto
+    const etiqueta = p.lobby ? (p.ready ? "PRONTO" : "NÃO PRONTO") : null;
+    const placaSig = `${p.nick}|${p.coins}|${cor}|${etiqueta}`;
     if (s.placaSig !== placaSig) {
       s.placaSig = placaSig;
-      s.plate.userData.set(p.nick, p.coins, cor);
+      s.plate.userData.set(p.nick, p.coins, cor, etiqueta);
     }
     if (s.fotoSig !== (p.avatar || "")) {
       s.fotoSig = p.avatar || "";
       s.plate.userData.setFoto(p.avatar || null);
     }
-    updateChips(s, p.coins);
+    updateChips(s, p.lobby ? 0 : p.coins);
     updateCards(s, p, p.id === meId);
+    // no lobby as mãos ficam vazias: ninguém recebeu carta ainda
+    s.hand.visible = !p.lobby;
 
     const current = state.phase === "turn" && state.currentPlayerId === p.id;
     s.isCurrent = current;
@@ -1335,7 +1535,7 @@ export function update(state, meId, opts = {}) {
     s.chips.visible = !esconderMeuCorpo;
     s.ring.visible = !esconderMeuCorpo;
 
-    s.body.position.y = p.aliveCount <= 0 ? -0.25 : 0;
+    s.body.position.y = (s.alturaBase ?? 0) + (p.aliveCount <= 0 ? -0.25 : 0);
   });
 
   updateMyHand(players.find((x) => x.id === meId));
@@ -1461,10 +1661,38 @@ function animate() {
   if (lampPivot) {
     const kick = Math.max(0, (lampKick.t - nowMs) / 2600);
     const amp = 0.055 + kick * 0.2;
-    lampPivot.rotation.z = Math.sin(t * (0.55 + kick * 1.5)) * amp;
-    lampPivot.rotation.x = Math.cos(t * (0.41 + kick * 1.2)) * amp * 0.62;
-    if (lampLight) lampLight.intensity = 42 * (1 + kick * 0.4);
-    if (bounceLight) bounceLight.intensity = 13 * (1 + kick * 0.35);
+
+    // Enquanto o jogador segura a lâmpada, ela obedece à mão; ao soltar,
+    // volta a balançar sozinha a partir de onde estava.
+    if (lampDrag.ativo) {
+      lampPivot.rotation.z = lampDrag.z;
+      lampPivot.rotation.x = lampDrag.x;
+    } else {
+      lampPivot.rotation.z = Math.sin(t * (0.55 + kick * 1.5) + lampDrag.fase) * amp;
+      lampPivot.rotation.x = Math.cos(t * (0.41 + kick * 1.2) + lampDrag.fase) * amp * 0.62;
+    }
+
+    // Mau contato: de tempos em tempos a luz pisca algumas vezes seguidas.
+    let falha = 1;
+    if (aj("piscaLigado", 1) >= 0.5) {
+      const ciclo = Math.max(2, aj("piscaCada", 7));
+      const dentro = t % ciclo;
+      const quantas = Math.max(1, Math.round(aj("piscaQuantas", 3)));
+      const crise = quantas * 0.16; // dura pouco: é um susto, não um apagão
+      if (dentro < crise) {
+        const piscada = Math.floor(dentro / 0.16);
+        const meio = (dentro % 0.16) / 0.16;
+        // apaga rápido e volta, com a última piscada mais demorada
+        if (piscada < quantas && meio < 0.55)
+          falha = 1 - aj("piscaForca", 0.78) * (0.6 + Math.random() * 0.4);
+      }
+    }
+
+    if (lampLight)
+      lampLight.intensity = aj("luzForca", 42) * (1 + kick * 0.4) * falha;
+    if (bounceLight)
+      bounceLight.intensity = aj("luzRebote", 13) * (1 + kick * 0.35) * falha;
+    if (lampBulb) lampBulb.material.color.setScalar(falha > 0.6 ? 1 : 0.35);
   }
 
   if (table) {
@@ -1671,6 +1899,27 @@ function animate() {
     });
   }
 
+  // Comemoração: a câmera está colada no vencedor, e qualquer etiqueta
+  // (placa, cronômetro, resposta, balão) usa depthTest:false — pertinho da
+  // lente vira um letreiro tapando a tela. Quem ganhou já está escrito no
+  // cartão que aparece acima dele.
+  if (vencedorId) {
+    for (const [, s] of seats) {
+      s.plate.visible = false;
+      s.timeLbl.visible = false;
+      s.respLbl.visible = false;
+      s.chatLbl.visible = false;
+    }
+  }
+
+  // a lâmpada avisa que dá para pegar
+  if (!targets && !orbit.dragging && !lampDrag.ativo) {
+    const h = pick();
+    const cur = h?.lamp ? "grab" : "";
+    if (renderer.domElement.style.cursor !== cur)
+      renderer.domElement.style.cursor = cur;
+  }
+
   // destaque de quem está sob o mouse na hora de escolher alvo
   if (targets) {
     const hit = pick();
@@ -1679,11 +1928,12 @@ function animate() {
       hovered = novo;
       renderer.domElement.style.cursor = novo ? "pointer" : "";
     }
-    for (const [pid, s] of seats) s.body.scale.setScalar(pid === hovered ? 1.06 : 1);
+    for (const [pid, s] of seats)
+      s.body.scale.setScalar((s.escala ?? 1) * (pid === hovered ? 1.06 : 1));
   } else if (hovered) {
     hovered = null;
     renderer.domElement.style.cursor = "";
-    for (const [, s] of seats) s.body.scale.setScalar(1);
+    for (const [, s] of seats) s.body.scale.setScalar(s.escala ?? 1);
   }
 
   renderer.render(scene, camera);

@@ -120,3 +120,28 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
       assento, que em 1ª pessoa é onde está a câmera, e as letras tapavam a
       tela. No **2D fica como estava**
 - [x] N2. Cartas do HUD **fixas e maiores**
+
+## O. Bancada de ajustes e acabamento
+
+- [x] O1. **Painel de ajustes do 3D** na sala `/teste`: mesa (tamanho,
+      altura), personagens (distância do centro, tamanho, altura), luz
+      (intensidade), câmera. Com 5 pessoas sentadas como se a partida
+      tivesse começado, para ver a mudança em tempo real. Salva e vira o
+      padrão do jogo
+- [x] O2. Vitória: a **câmera vai para o vencedor** e a mensagem e o confete
+      aparecem **em cima dele**
+- [x] O3. Botão para **esconder o log**; **regras** e **cartas do jogo** saem
+      do painel direito e viram modal por um **ícone de interrogação** na
+      barra de cima
+- [ ] O4. BUG: no 3D o clique no personagem funciona para roubar mas não para
+      **assassinar** — NÃO REPRODUZIDO. Testado com 3 e com 7 moedas, mesa de
+      2 e de 4, nas duas câmeras: sempre emitiu `assassinate`. Falta saber a
+      situação exata. Suspeita: com menos de 3 moedas o botão fica travado e
+      clicar no personagem não faz nada — que é o certo, mas parece defeito
+- [x] O5. Lâmpada: **clicar, segurar e arrastar** para o lado; ao soltar, ela
+      balança (hoje é só um clique que sacode)
+- [x] O6. Desenho da lâmpada está **de cabeça para baixo**
+- [x] O7. **Lobby na mesa** (2D e 3D): quem está sentado já aparece em volta
+      da mesa antes de começar, sem cartas nem moedas, com **PRONTO / NÃO
+      PRONTO** acima do personagem. A fila continua só na lista
+- [x] O8. Luz da mesa **piscando de tempos em tempos**, como mau contato
