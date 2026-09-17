@@ -49,7 +49,7 @@ const els = {
   targetActionName: document.getElementById("targetActionName"),
   cancelTargetBtn: document.getElementById("cancelTargetBtn"),
 
-  responseModal: document.getElementById("responseModal"),
+  respHud: document.getElementById("respHud"),
   respTimer: document.getElementById("respTimer"),
   reactionBox: document.getElementById("reactionBox"),
   pendingText: document.getElementById("pendingText"),
@@ -695,6 +695,11 @@ function scheduleEvent(ev) {
 const chatTimers = new Map();
 
 function showChatBubble(playerId, text) {
+  // no 3D o balão é um sprite acima do ombro; sem isto, metade do chat
+  // rápido ficava invisível para quem joga em 3D
+  const ms3d = Math.min(9000, 3200 + text.length * 45);
+  window.COUP3D?.onSpeak(playerId, text, ms3d);
+
   const s = seatEls.get(playerId);
   if (!s) return; // quem está na fila não tem card; a mensagem fica só no Log
 
@@ -1512,7 +1517,7 @@ function renderReactionBoxes() {
   if (!m || m.aliveCount <= 0) {
     els.reactionBox.classList.add("hidden");
     els.blockChallengeBox.classList.add("hidden");
-    els.responseModal.classList.add("hidden");
+    els.respHud.classList.add("hidden");
     return;
   }
 
@@ -1578,13 +1583,13 @@ function renderReactionBoxes() {
     !els.reactionBox.classList.contains("hidden") ||
     !els.blockChallengeBox.classList.contains("hidden");
 
-  els.responseModal.classList.toggle("hidden", !open);
+  els.respHud.classList.toggle("hidden", !open);
   if (open) renderRespTimer();
 }
 
 // contagem regressiva dentro do modal de resposta
 function renderRespTimer() {
-  if (!state || els.responseModal.classList.contains("hidden")) return;
+  if (!state || els.respHud.classList.contains("hidden")) return;
 
   const ts =
     state.phase === "reaction"
@@ -2008,8 +2013,14 @@ function renderMeHud() {
   }
   els.meHud.classList.remove("hidden");
 
+  // 3D em 1ª pessoa: as cartas ficam na minha mão, na cena; repeti-las no
+  // HUD só rouba espaço. Em 3ª pessoa elas ficam longe, então aumentam.
+  const v = window.COUP3D?.view?.() || { mode: "2d", cam: "first" };
+  const primeira3d = v.mode === "3d" && v.cam === "first";
+  const terceira3d = v.mode === "3d" && v.cam === "third";
+
   const sig = [
-    m.nick, m.coins, m.avatar || "", m.color,
+    m.nick, m.coins, m.avatar || "", m.color, v.mode, v.cam,
     (m.hand || []).map((c) => (c.role || "?") + "|" + c.alive).join(","),
     hideMyCards, state.currentPlayerId === myId, UI.theme,
   ].join("|");
@@ -2025,6 +2036,9 @@ function renderMeHud() {
   els.meNick.textContent = m.nick;
   els.meCoins.innerHTML = coinStackHTML(m.coins);
   els.meCoinsN.textContent = String(m.coins);
+
+  els.meHud.classList.toggle("semCartas", primeira3d);
+  els.meHud.classList.toggle("cartasGrandes", terceira3d);
 
   els.meCards.innerHTML = "";
   for (const c of m.hand || []) {

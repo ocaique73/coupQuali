@@ -85,3 +85,30 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
 ## I. 2D
 
 - [x] I1. Mensagens do chat na **horizontal** (vertical é ruim de ler)
+
+## M. Rodada de acabamento 2
+
+- [x] M1. Foto do perfil **sai do rosto** do boneco. Vira uma placa acima da
+      cabeça: **foto → nome → moedas**, com o **tempo embaixo do nome**. Só
+      dos OUTROS: os meus dados eu vejo no HUD
+- [x] M2. **Zoom com o scroll** do mouse no 3D
+- [x] M3. Respostas (aceitar/bloquear/contestar) **saem do modal** e vão para
+      o topo do HUD — o modal tapava as animações do jogo
+- [x] M4. BUG: ao escolher **roubo** não dá para clicar em ninguém. O **nome**
+      também tem de ser clicável no 3D
+- [x] M5. Giro da câmera **sem limite**: dar a volta completa na mesa
+- [x] M6. Gestos:
+  - [x] dedo do meio: **esticar o braço** e mostrar o dedo (hoje só levanta)
+  - [x] faz o L: **mão em L** levantada e o **13 vermelho** subindo acima da
+        cabeça e do nome (hoje levanta a mão reta, feio)
+  - [x] boa: esticar o braço e fazer **joinha**
+  - [x] será?: **interrogação** acima da cabeça e do nome
+  - [x] kkkk: **mexer a boca** rindo
+  - [x] tenso: **gota** ao lado da cabeça
+  - [x] mentira: livre (escolhido: **nariz cresce**)
+  - [x] bater na mesa e palmas: já estão bons
+- [x] M7. Tempo ao lado do nome **só na vez** do jogador
+- [x] M8. HUD: cartas **maiores** no 3D em 3ª pessoa; em **1ª pessoa sem
+      cartas** no HUD (já aparecem na mão), só o resto das informações
+- [x] M9. Girar a câmera **só em 3ª pessoa**: em 1ª pessoa parece que eu troquei
+      de lugar na mesa

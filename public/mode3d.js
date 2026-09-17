@@ -195,6 +195,17 @@
       }
     },
 
+    // chat escrito e texto do chat rápido, acima do ombro no 3D
+    onSpeak(pid, txt, ms) {
+      if (mode === "3d" && scene) {
+        try {
+          scene.speak(pid, txt, ms);
+        } catch (e) {
+          console.error("[3D]", e);
+        }
+      }
+    },
+
     onEmote(ev) {
       if (mode === "3d" && scene) {
         try {
@@ -223,6 +234,10 @@
     },
 
     isOn: () => mode === "3d" && !failed && !!scene,
+
+    // o HUD do cliente muda conforme o visual: em 1ª pessoa as cartas já
+    // estão na mão do jogador e não precisam ser repetidas
+    view: () => ({ mode: failed ? "2d" : mode, cam }),
   };
 
   addEventListener("resize", () => scene && scene.resize());

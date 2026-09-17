@@ -1873,13 +1873,6 @@ h2 {
 }
 
 /* ---------- modal de resposta ---------- */
-.responseCard {
-  width: min(620px, 100%);
-  position: relative;
-  border-color: var(--yellow);
-  box-shadow: 0 0 60px rgba(255, 212, 0, 0.18);
-  animation: respIn 0.32s cubic-bezier(0.22, 0.9, 0.28, 1);
-}
 @keyframes respIn {
   from {
     opacity: 0;
@@ -1903,12 +1896,6 @@ h2 {
   color: var(--red);
   border-color: var(--red);
   animation: blink 1s steps(2, start) infinite;
-}
-.respHead {
-  margin: 0 0 10px;
-  font-size: 12px;
-  letter-spacing: 1.4px;
-  color: var(--muted);
 }
 .responseBlock .responseText {
   font-size: 17px;
@@ -3219,4 +3206,80 @@ body[data-theme="qualitas"] .lookBtn {
     width: 34px;
     height: 47px;
   }
+}
+
+/* =====================================================================
+   v9 — faixa de resposta no topo da mesa
+
+   Era um modal cobrindo a tela inteira. O problema não era o visual: com
+   o modal aberto o jogador não via a mesa, ou seja, perdia exatamente a
+   animação da jogada que estava respondendo. Agora é uma faixa estreita
+   no alto, com a mesa inteira visível por baixo.
+   ===================================================================== */
+.respHud {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: min(660px, calc(100% - 20px));
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: rgba(8, 14, 22, 0.94);
+  border: 2px solid var(--yellow);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.6);
+  animation: respIn 0.28s cubic-bezier(0.22, 0.9, 0.28, 1);
+}
+.respHud .respTimer {
+  top: 10px;
+  right: 12px;
+}
+.respHud .responseBlock .responseText {
+  font-size: 14.5px;
+  margin-bottom: 9px;
+  padding-right: 78px;
+}
+.respHud .respRow {
+  margin-bottom: 0;
+  gap: 8px;
+}
+.respHud .responseBlock .btn.big {
+  min-width: 0;
+  padding: 9px 12px;
+  font-size: 13.5px;
+}
+.respHud #blockPickRow {
+  margin-top: 8px;
+}
+/* A dica explica a regra e é longa. Na faixa ela vira uma linha só: quem
+   precisa do texto inteiro tem o mesmo aviso no painel de ações. */
+.respHud .responseHint {
+  margin-top: 8px;
+  padding-top: 8px;
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1200px) {
+  .respHud .responseBlock .btn.big {
+    font-size: 12px;
+    padding: 8px 9px;
+  }
+}
+
+/* M8 — o HUD acompanha o visual escolhido */
+.meHud.semCartas .meCards {
+  display: none;
+}
+.meHud.cartasGrandes {
+  width: 188px;
+}
+.meHud.cartasGrandes .meCard {
+  width: 62px;
+  height: 86px;
+}
+.meHud.cartasGrandes .meCard span:not(.meBack) {
+  font-size: 8.5px;
 }

@@ -43,17 +43,32 @@ let hovered = null;
 const shakeUntil = { t: 0 };
 const lampKick = { t: 0 };
 const flying = []; // moedas/cartas em movimento pela mesa
+const pops = []; // símbolos de gesto subindo acima do jogador
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
-// Giro da câmera pelo arraste. É só um deslocamento em volta do MESMO ponto
-// de vista: a câmera continua ancorada no assento do jogador, então girar
-// não revela a carta de ninguém — ela é desenhada de costas para a mesa.
-const orbit = { yaw: 0, pitch: 0, dragging: false, lx: 0, ly: 0, moved: false };
-const YAW_MAX = Math.PI * 0.42;
+// Giro e zoom da câmera. O giro dá a volta inteira na mesa, sem trava, e o
+// zoom aproxima ou afasta. Nada disso revela carta de ninguém: a carta viva
+// de outro jogador nunca chega a receber a arte (ver updateCards).
+//
+// Girar vale SÓ em 3ª pessoa. Em 1ª pessoa a câmera é o olho do jogador
+// sentado; girar dava a impressão de ter trocado de lugar na mesa.
+const orbit = {
+  yaw: 0,
+  pitch: 0,
+  zoom: 1,
+  dragging: false,
+  lx: 0,
+  ly: 0,
+  andou: 0, // pixels percorridos desde que apertou
+};
 const PITCH_MIN = -0.25;
 const PITCH_MAX = 0.55;
+const ZOOM_MIN = 0.55;
+const ZOOM_MAX = 2.1;
+// abaixo disto o movimento foi tremedeira de clique, não arraste
+const ARRASTE_MIN = 6;
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
@@ -110,6 +125,116 @@ function makeLabel(text, color = "#ffffff", w = 1.6, h = 0.4) {
   );
   spr.scale.set(w, h, 1);
   spr.userData.redraw = draw;
+  return spr;
+}
+
+// Placa de identificação acima da cabeça: foto → nome → moedas, numa linha
+// só. A foto do perfil mora AQUI, não no rosto do boneco. Tudo desenhado num
+// canvas porque um sprite custa uma chamada de desenho, e três elementos
+// separados custariam três.
+function makePlate() {
+  const c = document.createElement("canvas");
+  c.width = 768;
+  c.height = 176;
+  const g = c.getContext("2d");
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+
+  let foto = null;
+  let dados = { nick: "", coins: 0, cor: "#ffffff" };
+
+  function draw() {
+    const { nick, coins, cor } = dados;
+    g.clearRect(0, 0, c.width, c.height);
+
+    g.font = "bold 70px system-ui, sans-serif";
+    const wNick = g.measureText(nick).width;
+    g.font = "bold 62px system-ui, sans-serif";
+    const wMoedas = g.measureText(String(coins)).width;
+
+    const rFoto = 56;
+    const larg = (foto ? rFoto * 2 + 20 : 0) + wNick + 24 + 52 + wMoedas;
+    let x = (c.width - larg) / 2;
+    const cy = c.height / 2;
+
+    // pílula escura por trás: a sala é escura, mas o nome tem de ler sempre
+    g.fillStyle = "rgba(6,12,20,.8)";
+    g.beginPath();
+    const px = x - 28;
+    const pw = larg + 56;
+    if (g.roundRect) g.roundRect(px, 24, pw, 128, 64);
+    else g.rect(px, 24, pw, 128);
+    g.fill();
+    g.lineWidth = 6;
+    g.strokeStyle = cor;
+    g.stroke();
+
+    if (foto) {
+      g.save();
+      g.beginPath();
+      g.arc(x + rFoto, cy, rFoto, 0, Math.PI * 2);
+      g.clip();
+      g.drawImage(foto, x, cy - rFoto, rFoto * 2, rFoto * 2);
+      g.restore();
+      g.beginPath();
+      g.arc(x + rFoto, cy, rFoto, 0, Math.PI * 2);
+      g.lineWidth = 5;
+      g.strokeStyle = cor;
+      g.stroke();
+      x += rFoto * 2 + 20;
+    }
+
+    g.textAlign = "left";
+    g.textBaseline = "middle";
+    g.font = "bold 70px system-ui, sans-serif";
+    g.fillStyle = "#ffffff";
+    g.fillText(nick, x, cy);
+    x += wNick + 24;
+
+    // moeda desenhada à mão: emoji de moeda não existe em toda fonte
+    g.beginPath();
+    g.arc(x + 21, cy, 21, 0, Math.PI * 2);
+    g.fillStyle = "#ffd400";
+    g.fill();
+    g.lineWidth = 5;
+    g.strokeStyle = "#8a6b00";
+    g.stroke();
+    x += 52;
+
+    g.font = "bold 62px system-ui, sans-serif";
+    g.fillStyle = "#ffd400";
+    g.fillText(String(coins), x, cy);
+
+    tex.needsUpdate = true;
+  }
+
+  const spr = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }),
+  );
+  spr.scale.set(2.35, 0.54, 1);
+
+  spr.userData.set = (nick, coins, cor) => {
+    dados = { nick, coins, cor };
+    draw();
+  };
+  // A foto pode nunca chegar (link quebrado, servidor sem CORS). Se falhar,
+  // a placa continua válida, só sem retrato.
+  spr.userData.setFoto = (url) => {
+    if (!url) {
+      foto = null;
+      draw();
+      return;
+    }
+    const im = new Image();
+    im.crossOrigin = "anonymous";
+    im.onload = () => {
+      foto = im;
+      draw();
+    };
+    im.onerror = () => {};
+    im.src = url;
+  };
+
   return spr;
 }
 
@@ -261,21 +386,10 @@ function applyTheme(t) {
 const SKINS = [0xffdbac, 0xf1c9a0, 0xe0a875, 0xc68642, 0x8d5524, 0x4a2c14];
 const HAIRS = [0x1c1410, 0x2a1d14, 0x4a3520, 0x6b4a2a, 0x9a6b3f, 0xd9b380];
 
-const faceCache = new Map();
-function faceTexture(url) {
-  if (!faceCache.has(url)) {
-    const loader = new THREE.TextureLoader();
-    loader.setCrossOrigin("anonymous");
-    const t = loader.load(url, undefined, undefined, () =>
-      faceCache.set(url, null),
-    );
-    t.colorSpace = THREE.SRGBColorSpace;
-    faceCache.set(url, t);
-  }
-  return faceCache.get(url);
-}
-
-// mão com palma, quatro dedos e polegar
+// Mão com palma, quatro dedos e polegar. Cada dedo fica num PIVÔ no nó:
+// girar o pivô dobra o dedo de verdade, em vez de arrastar a cápsula inteira
+// para dentro da palma. É o que permite fechar a mão e deixar um dedo só
+// esticado — o do meio, o indicador em L, o polegar do joinha.
 function buildHand(skinMat) {
   const h = new THREE.Group();
 
@@ -283,28 +397,66 @@ function buildHand(skinMat) {
   palm.castShadow = true;
   h.add(palm);
 
+  // índice 0 = mindinho ... índice 3 = indicador (o mais perto do polegar)
+  const fingers = [];
   for (let i = 0; i < 4; i++) {
+    const pivot = new THREE.Group();
+    pivot.position.set(-0.033 + i * 0.022, 0, 0.05);
+
     const f = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.0115, 0.055, 3, 6),
       skinMat,
     );
     f.rotation.x = Math.PI / 2;
-    f.position.set(-0.033 + i * 0.022, 0, 0.078);
-    h.add(f);
+    f.position.z = 0.039;
+    f.castShadow = true;
+    pivot.add(f);
+
+    h.add(pivot);
+    fingers.push(pivot);
   }
 
+  const tPivot = new THREE.Group();
+  tPivot.position.set(0.05, 0.004, 0.012);
   const thumb = new THREE.Mesh(
     new THREE.CapsuleGeometry(0.014, 0.042, 3, 6),
     skinMat,
   );
   thumb.rotation.set(Math.PI / 2, 0, -0.9);
-  thumb.position.set(0.055, 0.004, 0.03);
-  h.add(thumb);
+  thumb.position.set(0.006, 0, 0.02);
+  tPivot.add(thumb);
+  h.add(tPivot);
 
+  h.userData.fingers = fingers;
+  h.userData.thumb = tPivot;
+  poseHand(h, "aberta");
   return h;
 }
 
-export function buildCharacter({ color = 0, look = null, avatar = null, seed = 0 } = {}) {
+// Quanto cada dedo dobra em cada pose. Dobrar é girar no eixo X: o dedo sai
+// de apontando para a frente e desce para dentro da palma.
+// f = quanto cada dedo dobra; t = polegar para cima/baixo; tz = polegar
+// aberto para o lado. O L só fecha se o polegar sair a 90° do indicador.
+const POSES = {
+  aberta: { f: [0, 0, 0, 0], t: 0, tz: 0 },
+  punho: { f: [1.85, 1.85, 1.85, 1.85], t: 1.15, tz: 0 },
+  dedo: { f: [1.95, 1.95, 0, 1.95], t: 1.2, tz: 0 }, // só o do meio de pé
+  ele: { f: [1.95, 1.95, 1.95, 0], t: -0.05, tz: -1.15 }, // indicador + polegar em L
+  joinha: { f: [2.05, 2.05, 2.05, 2.05], t: -1.45, tz: 0 }, // polegar para cima
+};
+
+function poseHand(h, nome) {
+  const p = POSES[nome] || POSES.aberta;
+  const fs = h.userData?.fingers;
+  if (!fs) return;
+  fs.forEach((f, i) => (f.rotation.x = p.f[i]));
+  if (h.userData.thumb) h.userData.thumb.rotation.set(p.t, 0, p.tz || 0);
+}
+
+// A foto do perfil NÃO entra aqui: ela aparece na placa acima da cabeça,
+// junto do nome e das moedas. Colada no rosto ficava irreconhecível e ainda
+// engolia a cara do boneco.
+export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
   const g = new THREE.Group();
   const L = look || {
     shirt: "short",
@@ -387,66 +539,51 @@ export function buildCharacter({ color = 0, look = null, avatar = null, seed = 0
   head.castShadow = true;
   g.add(head);
 
-  // A foto do perfil vira o rosto. Se a imagem falhar ao carregar, sobra a
-  // cabeça normal que já está desenhada por baixo.
-  const tex = avatar ? faceTexture(avatar) : null;
-  if (tex) {
-    const disc = new THREE.Mesh(
-      new THREE.CircleGeometry(0.142, 32),
-      new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }),
-    );
-    disc.position.set(0, 1.755, 0.153);
-    g.add(disc);
+  g.userData.head = head;
 
-    const aro = new THREE.Mesh(
-      new THREE.TorusGeometry(0.142, 0.012, 10, 32),
-      skinMat,
-    );
-    aro.position.copy(disc.position);
-    g.add(aro);
-  } else {
-    for (const sx of [-1, 1]) {
-      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), skinMat);
-      ear.scale.set(0.5, 1, 0.7);
-      ear.position.set(sx * 0.152, 1.74, 0);
-      g.add(ear);
-    }
-
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.07, 10), skinMat);
-    nose.rotation.x = Math.PI / 2;
-    nose.position.set(0, 1.73, 0.163);
-    g.add(nose);
-
-    const eyeW = new THREE.MeshStandardMaterial({ color: 0xf7f7f7, roughness: 0.25 });
-    const eyeD = new THREE.MeshStandardMaterial({ color: 0x1b1410, roughness: 0.15 });
-    for (const sx of [-1, 1]) {
-      const w = new THREE.Mesh(new THREE.SphereGeometry(0.032, 14, 12), eyeW);
-      w.scale.set(1, 0.72, 0.6);
-      w.position.set(sx * 0.062, 1.79, 0.146);
-      g.add(w);
-
-      const d = new THREE.Mesh(new THREE.SphereGeometry(0.0155, 10, 8), eyeD);
-      d.position.set(sx * 0.062, 1.79, 0.167);
-      g.add(d);
-
-      const br = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.013, 0.02), hairMat);
-      br.position.set(sx * 0.062, 1.829, 0.151);
-      br.rotation.z = sx * 0.12;
-      g.add(br);
-    }
-
-    const mouth = new THREE.Mesh(
-      new THREE.BoxGeometry(0.06, 0.012, 0.02),
-      new THREE.MeshStandardMaterial({ color: 0x7a3b3b, roughness: 0.5 }),
-    );
-    mouth.position.set(0, 1.676, 0.152);
-    g.add(mouth);
-
-    const chin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 14, 10), skinMat);
-    chin.scale.set(1, 0.6, 0.85);
-    chin.position.set(0, 1.645, 0.06);
-    g.add(chin);
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), skinMat);
+    ear.scale.set(0.5, 1, 0.7);
+    ear.position.set(sx * 0.152, 1.74, 0);
+    g.add(ear);
   }
+
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.07, 10), skinMat);
+  nose.rotation.x = Math.PI / 2;
+  nose.position.set(0, 1.73, 0.163);
+  g.add(nose);
+  g.userData.nose = nose; // cresce no gesto de "mentira"
+
+  const eyeW = new THREE.MeshStandardMaterial({ color: 0xf7f7f7, roughness: 0.25 });
+  const eyeD = new THREE.MeshStandardMaterial({ color: 0x1b1410, roughness: 0.15 });
+  for (const sx of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.SphereGeometry(0.032, 14, 12), eyeW);
+    w.scale.set(1, 0.72, 0.6);
+    w.position.set(sx * 0.062, 1.79, 0.146);
+    g.add(w);
+
+    const d = new THREE.Mesh(new THREE.SphereGeometry(0.0155, 10, 8), eyeD);
+    d.position.set(sx * 0.062, 1.79, 0.167);
+    g.add(d);
+
+    const br = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.013, 0.02), hairMat);
+    br.position.set(sx * 0.062, 1.829, 0.151);
+    br.rotation.z = sx * 0.12;
+    g.add(br);
+  }
+
+  const mouth = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.012, 0.02),
+    new THREE.MeshStandardMaterial({ color: 0x7a3b3b, roughness: 0.5 }),
+  );
+  mouth.position.set(0, 1.676, 0.152);
+  g.add(mouth);
+  g.userData.mouth = mouth; // abre e fecha no gesto de rir
+
+  const chin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 14, 10), skinMat);
+  chin.scale.set(1, 0.6, 0.85);
+  chin.position.set(0, 1.645, 0.06);
+  g.add(chin);
 
   const hair = new THREE.Mesh(
     new THREE.SphereGeometry(0.178, 24, 18, 0, Math.PI * 2, 0, Math.PI / 1.85),
@@ -456,14 +593,18 @@ export function buildCharacter({ color = 0, look = null, avatar = null, seed = 0
   hair.position.y = 1.757;
   g.add(hair);
 
-  if (!tex) {
-    const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.05), hairMat);
-    fringe.position.set(0, 1.85, 0.118);
-    g.add(fringe);
-  }
+  const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.05), hairMat);
+  fringe.position.set(0, 1.85, 0.118);
+  g.add(fringe);
 
   // Braço ESQUERDO segura as cartas; o DIREITO fica livre para os gestos.
+  //
+  // Cada braço tem DOIS pivôs: o ombro (o grupo do braço) e o cotovelo. Com
+  // os dois em zero a pose é a de sempre — mão apoiada na mesa. Girar o
+  // cotovelo é o que faz o braço ESTICAR nos gestos, em vez de o boneco só
+  // levantar o conjunto todo duro.
   const arms = new THREE.Group();
+  const maos = [];
   for (const sx of [-1, 1]) {
     const arm = new THREE.Group();
 
@@ -476,15 +617,19 @@ export function buildCharacter({ color = 0, look = null, avatar = null, seed = 0
     upper.castShadow = true;
     arm.add(upper);
 
+    const elbow = new THREE.Group();
+    elbow.position.set(0, -0.2, 0.16);
+    arm.add(elbow);
+
     // manga longa cobre o antebraço; curta deixa a pele à mostra
     const fore = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.058 * W, 0.24, 4, 10),
       mangaLonga ? shirtMat : skinMat,
     );
-    fore.position.set(0, -0.19, 0.28);
+    fore.position.set(0, 0.01, 0.12);
     fore.rotation.x = -1.25;
     fore.castShadow = true;
-    arm.add(fore);
+    elbow.add(fore);
 
     if (mangaLonga) {
       const punho = new THREE.Mesh(
@@ -492,20 +637,25 @@ export function buildCharacter({ color = 0, look = null, avatar = null, seed = 0
         darkMat,
       );
       punho.rotation.x = -1.25;
-      punho.position.set(0, -0.225, 0.395);
-      arm.add(punho);
+      punho.position.set(0, -0.025, 0.235);
+      elbow.add(punho);
     }
 
     const hand = buildHand(skinMat);
-    hand.position.set(0, -0.235, 0.44);
+    hand.position.set(0, -0.035, 0.28);
     hand.rotation.x = -0.35;
-    arm.add(hand);
+    elbow.add(hand);
+    arm.userData.hand = hand;
+    arm.userData.elbow = elbow;
+    maos.push(hand);
 
     arm.position.set(sx * ARM_X * W, 1.43, 0);
+    arm.userData.x0 = sx * ARM_X * W; // posição de descanso, respeitando o corpo
     arms.add(arm);
   }
   g.add(arms);
   g.userData.arms = arms;
+  g.userData.maos = maos;
   // guardado para o brilho da vez: é a ROUPA que pulsa, não uma luz em volta
   g.userData.shirtMat = shirtMat;
   g.userData.shirtColor = new THREE.Color(COLORS[color % COLORS.length]);
@@ -573,7 +723,7 @@ function seatAngle(idx, total) {
 
 function lookSig(p) {
   const L = p.look || {};
-  return `${p.color}|${L.shirt}|${L.body}|${L.skin}|${L.prop}|${p.avatar || ""}`;
+  return `${p.color}|${L.shirt}|${L.body}|${L.skin}|${L.prop}`;
 }
 
 function buildSeat(p, idx, total) {
@@ -587,7 +737,6 @@ function buildSeat(p, idx, total) {
   refs.body = buildCharacter({
     color: p.color ?? 0,
     look: p.look,
-    avatar: p.avatar,
     seed: idx,
   });
   refs.lookSig = lookSig(p);
@@ -619,17 +768,15 @@ function buildSeat(p, idx, total) {
   refs.chips.position.set(0.5, 1.0, 0.3);
   g.add(refs.chips);
 
-  refs.label = makeLabel(p.nick);
-  refs.label.position.set(0, 2.34, 0);
-  g.add(refs.label);
+  // foto, nome e moedas numa placa só, acima da cabeça
+  refs.plate = makePlate();
+  refs.plate.position.set(0, 2.42, 0);
+  refs.plate.userData.pid = p.id; // clicar no NOME também escolhe o alvo
+  g.add(refs.plate);
 
-  refs.coinLbl = makeLabel("0", "#ffd400", 0.9, 0.24);
-  refs.coinLbl.position.set(0, 2.11, 0);
-  g.add(refs.coinLbl);
-
-  // cronômetro da vez
+  // cronômetro logo abaixo do nome, e só na vez do jogador
   refs.timeLbl = makeLabel("", "#ffd400", 1.0, 0.26);
-  refs.timeLbl.position.set(0, 1.95, 0);
+  refs.timeLbl.position.set(0, 2.08, 0);
   refs.timeLbl.visible = false;
   g.add(refs.timeLbl);
 
@@ -638,6 +785,14 @@ function buildSeat(p, idx, total) {
   refs.respLbl.position.set(0.95, 1.62, 0);
   refs.respLbl.visible = false;
   g.add(refs.respLbl);
+
+  // Balão de fala: chat escrito e o texto do chat rápido. No 2D isso aparece
+  // ao lado do card; no 3D não aparecia em lugar nenhum, então metade do
+  // chat rápido era invisível para quem jogava em 3D.
+  refs.chatLbl = makeLabel("", "#ffffff", 2.1, 0.44);
+  refs.chatLbl.position.set(-1.0, 1.78, 0);
+  refs.chatLbl.visible = false;
+  g.add(refs.chatLbl);
 
   refs.ring = new THREE.Mesh(
     new THREE.RingGeometry(0.42, 0.58, 40),
@@ -904,15 +1059,17 @@ function onPointerMove(e) {
     const dy = e.clientY - orbit.ly;
     orbit.lx = e.clientX;
     orbit.ly = e.clientY;
-    if (Math.abs(dx) + Math.abs(dy) > 2) orbit.moved = true;
-    orbit.yaw = Math.max(-YAW_MAX, Math.min(YAW_MAX, orbit.yaw - dx * 0.005));
+    orbit.andou += Math.abs(dx) + Math.abs(dy);
+    // sem trava: dá para dar a volta completa na mesa
+    orbit.yaw -= dx * 0.005;
     orbit.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, orbit.pitch + dy * 0.004));
   }
 }
 
 function onPointerDown(e) {
+  if (!thirdPerson) return; // em 1ª pessoa não se gira
   orbit.dragging = true;
-  orbit.moved = false;
+  orbit.andou = 0;
   orbit.lx = e.clientX;
   orbit.ly = e.clientY;
 }
@@ -922,10 +1079,18 @@ function onPointerUp() {
   renderer.domElement.style.cursor = "";
 }
 
-// duplo clique volta a câmera para o centro
+// scroll aproxima e afasta
+function onWheel(e) {
+  e.preventDefault();
+  const k = e.deltaY > 0 ? 1.08 : 1 / 1.08;
+  orbit.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, orbit.zoom * k));
+}
+
+// duplo clique volta a câmera para o lugar
 function onDblClick() {
   orbit.yaw = 0;
   orbit.pitch = 0;
+  orbit.zoom = 1;
 }
 
 function pick() {
@@ -944,9 +1109,11 @@ function pick() {
 }
 
 function onClick(e) {
-  // arrastar para girar não pode disparar clique (escolher alvo, lâmpada)
-  if (orbit.moved) {
-    orbit.moved = false;
+  // Arrastar para girar não pode virar clique. O limite é generoso de
+  // propósito: com 2px, tremer a mão ao clicar num alvo engolia o clique e
+  // não dava para escolher quem roubar.
+  if (orbit.andou > ARRASTE_MIN) {
+    orbit.andou = 0;
     return;
   }
   onPointerMove(e);
@@ -995,6 +1162,7 @@ export function init(el, opts = {}) {
   renderer.domElement.addEventListener("pointerup", onPointerUp);
   renderer.domElement.addEventListener("pointerleave", onPointerUp);
   renderer.domElement.addEventListener("dblclick", onDblClick);
+  renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
   renderer.domElement.addEventListener("click", onClick);
 
   clock = new THREE.Clock();
@@ -1039,12 +1207,14 @@ function posicionaCamera() {
   const alt = thirdPerson ? 3.1 : 2.12;
   const olha = thirdPerson ? 1.0 : 0.92;
 
-  // o arraste gira o ponto de vista em volta do centro da mesa
-  const ang = Math.atan2(p.x, p.z) + orbit.yaw;
-  const raio = Math.hypot(p.x, p.z) * k;
+  // o arraste gira o ponto de vista em volta do centro da mesa, mas só em
+  // 3ª pessoa; em 1ª a câmera fica firme no assento
+  const giro = thirdPerson ? orbit.yaw : 0;
+  const ang = Math.atan2(p.x, p.z) + giro;
+  const raio = Math.hypot(p.x, p.z) * k * orbit.zoom;
   camera.position.set(
     Math.sin(ang) * raio,
-    alt + orbit.pitch * 1.4,
+    (alt + orbit.pitch * 1.4) * (0.55 + orbit.zoom * 0.45),
     Math.cos(ang) * raio,
   );
   camera.lookAt(0, olha, 0);
@@ -1092,20 +1262,21 @@ export function update(state, meId, opts = {}) {
       s.body = buildCharacter({
         color: p.color ?? 0,
         look: p.look,
-        avatar: p.avatar,
         seed: s.idx,
       });
       s.group.add(s.body);
       s.ring.material.color.set(COLORS[(p.color ?? 0) % COLORS.length]);
     }
 
-    if (s.nick !== p.nick) {
-      s.nick = p.nick;
-      s.label.userData.redraw(p.nick, "#ffffff", null);
+    const cor = "#" + COLORS[(p.color ?? 0) % COLORS.length].toString(16).padStart(6, "0");
+    const placaSig = `${p.nick}|${p.coins}|${cor}`;
+    if (s.placaSig !== placaSig) {
+      s.placaSig = placaSig;
+      s.plate.userData.set(p.nick, p.coins, cor);
     }
-    if (s.coinsShown !== p.coins) {
-      s.coinsShown = p.coins;
-      s.coinLbl.userData.redraw(String(p.coins), "#ffd400", null);
+    if (s.fotoSig !== (p.avatar || "")) {
+      s.fotoSig = p.avatar || "";
+      s.plate.userData.setFoto(p.avatar || null);
     }
     updateChips(s, p.coins);
     updateCards(s, p, p.id === meId);
@@ -1153,8 +1324,10 @@ export function update(state, meId, opts = {}) {
 
     s.body.visible = !esconderMeuCorpo;
     s.hand.visible = !esconderMeuCorpo;
-    s.label.visible = !souEu;
-    s.coinLbl.visible = !souEu;
+    s.plate.visible = !souEu;
+    // o balão some sozinho depois do tempo
+    if (s.chatLbl.visible && (s.chatAte || 0) < performance.now())
+      s.chatLbl.visible = false;
     // Em 1ª pessoa a câmera fica DENTRO do meu próprio assento: fichas e halo
     // envolviam a lente e viravam borrões amarelos tapando a tela.
     s.chips.visible = !esconderMeuCorpo;
@@ -1171,23 +1344,99 @@ export function update(state, meId, opts = {}) {
   if (deckMesh) deckMesh.visible = (state?.deckCount ?? 0) > 0;
 }
 
+// Símbolo que sobe acima da placa do jogador: o 13 do "faz o L", a
+// interrogação do "será?". Fica ACIMA do nome para não tapar a cara.
+function popSymbol(seat, txt, cor, ms) {
+  // O canvas do rótulo é 4:1; um sprite quadrado esticava o "13" e o "?"
+  // na vertical e saía um borrão.
+  const spr = makeLabel(txt, cor, 2.4, 0.6);
+  spr.position.set(0, 2.82, 0);
+  seat.group.add(spr);
+  pops.push({ spr, grupo: seat.group, nasceu: performance.now(), dur: ms });
+}
+
+// Gota de suor ao lado da cabeça. Desenhada como geometria e não como emoji:
+// emoji depende da fonte da máquina, e aqui já levamos um tofu por isso.
+function popGota(seat, ms) {
+  // Grande e acesa de propósito: na distância de jogo, uma gota "realista"
+  // some. A sala é escura, então ela precisa brilhar sozinha.
+  const gota = new THREE.Mesh(
+    new THREE.SphereGeometry(0.06, 14, 12),
+    new THREE.MeshStandardMaterial({
+      color: 0xa8e0ff,
+      roughness: 0.1,
+      transparent: true,
+      opacity: 0.95,
+      emissive: 0x4aa8e0,
+      emissiveIntensity: 1.4,
+    }),
+  );
+  gota.scale.set(0.85, 1.5, 0.85);
+  gota.position.set(0.24, 1.9, 0.08);
+  seat.group.add(gota);
+  pops.push({ spr: gota, grupo: seat.group, nasceu: performance.now(), dur: ms, gota: true });
+}
+
+// Fala acima do ombro, por um tempo. Serve para o chat escrito e para o
+// texto do chat rápido ("Mentira!", "Nice!", "filha da puta"...).
+export function speak(pid, txt, ms = 3200) {
+  const s = seats.get(pid);
+  if (!s || !txt) return;
+  s.chatLbl.userData.redraw(txt.slice(0, 26), "#ffffff", "rgba(10,16,26,.92)");
+  s.chatLbl.visible = true;
+  s.chatAte = performance.now() + ms;
+}
+
 export function emote(ev) {
   const s = seats.get(ev.playerId);
   if (!s) return;
   const now = performance.now();
+  const b = s.body.userData;
 
-  if (ev.kind === "bang") {
-    shakeUntil.t = now + 900;
-    lampKick.t = now + 1800;
-    s.body.userData.bang = now + 900; // bate com as DUAS mãos
-    for (const [, o] of seats)
-      o.cards.forEach((c) => (c.userData.jump = now + 700));
-  } else if (ev.kind === "finger" || ev.kind === "l13") {
-    s.body.userData.raise = now + 2200; // mão livre, a outra segura a carta
-  } else if (ev.kind === "clap") {
-    // larga a carta na mesa e bate palma com as duas
-    s.body.userData.clap = now + 1800;
-    s.hand.userData.down = now + 1800;
+  switch (ev.kind) {
+    case "bang":
+      shakeUntil.t = now + 900;
+      lampKick.t = now + 1800;
+      b.gesto = { nome: "bang", ate: now + 900, dur: 900 };
+      for (const [, o] of seats)
+        o.cards.forEach((c) => (c.userData.jump = now + 700));
+      break;
+
+    case "clap":
+      // larga a carta na mesa e bate palma com as duas
+      b.gesto = { nome: "clap", ate: now + 1800, dur: 1800 };
+      s.hand.userData.down = now + 1800;
+      break;
+
+    case "finger":
+      b.gesto = { nome: "dedo", ate: now + 2400, dur: 2400 };
+      break;
+
+    case "thumbs":
+      b.gesto = { nome: "joinha", ate: now + 2200, dur: 2200 };
+      break;
+
+    case "l13":
+      b.gesto = { nome: "ele", ate: now + 2600, dur: 2600 };
+      popSymbol(s, "13", "#ff3b3b", 2600);
+      break;
+
+    case "think":
+      popSymbol(s, "?", "#ffd400", 2200);
+      break;
+
+    case "laugh":
+      b.rir = now + 2400;
+      break;
+
+    case "sweat":
+      popGota(s, 2200);
+      break;
+
+    case "lie":
+      // nariz de Pinóquio: cresce e volta
+      b.nariz = now + 2600;
+      break;
   }
 }
 
@@ -1219,6 +1468,26 @@ function animate() {
     } else table.position.x = table.position.z = 0;
   }
 
+  // símbolos de gesto subindo e sumindo
+  for (let i = pops.length - 1; i >= 0; i--) {
+    const p = pops[i];
+    const k = (nowMs - p.nasceu) / p.dur;
+    if (k >= 1) {
+      p.grupo.remove(p.spr);
+      p.spr.material?.dispose?.();
+      pops.splice(i, 1);
+      continue;
+    }
+    if (p.gota) {
+      // a gota escorre para baixo
+      p.spr.position.y = 1.9 - k * 0.34;
+      p.spr.material.opacity = 0.95 * (1 - k);
+    } else {
+      p.spr.position.y = 2.82 + k * 0.5;
+      p.spr.material.opacity = k < 0.75 ? 1 : (1 - k) * 4;
+    }
+  }
+
   // moedas e cartas em trânsito
   for (let i = flying.length - 1; i >= 0; i--) {
     const f = flying[i];
@@ -1246,12 +1515,15 @@ function animate() {
       sm.emissiveIntensity += (alvo - sm.emissiveIntensity) * 0.14;
     }
 
+    // O anel no chão marca SÓ quem pode ser escolhido como alvo. Quem está
+    // na vez já se anuncia pela roupa acesa; o anel aceso junto virava um
+    // segundo aviso, e pior: não havia nada que o apagasse depois.
     if (s.ring) {
       if (s.isTarget) {
         s.ring.material.color.setHex(0xff3b3b);
         s.ring.material.opacity = 0.5 + Math.sin(t * 6) * 0.35;
-      } else if (s.isCurrent) {
-        s.ring.material.opacity = 0.85;
+      } else {
+        s.ring.material.opacity = 0;
       }
     }
 
@@ -1276,37 +1548,105 @@ function animate() {
     // Braços: o ESQUERDO segura a carta; o DIREITO faz os gestos.
     const arms = s.body.userData.arms;
     if (arms) {
-      const raise = (s.body.userData.raise || 0) - nowMs;
-      const clap = (s.body.userData.clap || 0) - nowMs;
-      const bang = (s.body.userData.bang || 0) - nowMs;
       const L = arms.children[0];
       const R = arms.children[1];
+      const g = s.body.userData.gesto;
+      const ativo = g && g.ate > nowMs ? g : null;
 
-      if (raise > 0) {
-        const k = Math.min(1, (2200 - raise) / 500);
-        R.rotation.x = -2.15 * k;
-        R.rotation.z = -0.25 * k;
-        L.rotation.set(0, 0, 0);
-        L.position.x = -ARM_X;
-        R.position.x = ARM_X;
-      } else if (bang > 0) {
-        const b = Math.abs(Math.sin(nowMs * 0.022));
-        L.rotation.set(-0.55 * b, 0, 0);
-        R.rotation.set(-0.55 * b, 0, 0);
-        L.position.x = -ARM_X;
-        R.position.x = ARM_X;
-      } else if (clap > 0) {
-        const d = Math.abs(Math.sin(nowMs * 0.018)) * 0.16;
-        L.rotation.set(-0.5, 0, 0);
-        R.rotation.set(-0.5, 0, 0);
-        L.position.x = -ARM_X + 0.14 + d;
-        R.position.x = ARM_X - 0.14 - d;
-      } else {
-        L.rotation.set(0, 0, 0);
-        R.rotation.set(0, 0, 0);
-        L.position.x = -ARM_X;
-        R.position.x = ARM_X;
+      // descanso: tudo zerado, mãos na mesa
+      for (const a of [L, R]) {
+        a.rotation.set(0, 0, 0);
+        a.position.x = a.userData.x0 ?? 0;
+        if (a.userData.elbow) a.userData.elbow.rotation.set(0, 0, 0);
+        if (a.userData.hand) {
+          a.userData.hand.rotation.set(-0.35, 0, 0);
+          poseHand(a.userData.hand, "aberta");
+        }
       }
+
+      if (ativo) {
+        // k sobe de 0 a 1 no começo do gesto: o braço não teleporta
+        const k = Math.min(1, (ativo.dur - (ativo.ate - nowMs)) / 420);
+        const eR = R.userData.elbow;
+        const mR = R.userData.hand;
+
+        if (ativo.nome === "bang") {
+          const b = Math.abs(Math.sin(nowMs * 0.022));
+          L.rotation.x = -0.55 * b;
+          R.rotation.x = -0.55 * b;
+          poseHand(L.userData.hand, "punho");
+          poseHand(mR, "punho");
+        } else if (ativo.nome === "clap") {
+          const d = Math.abs(Math.sin(nowMs * 0.018)) * 0.16;
+          L.rotation.x = -0.5;
+          R.rotation.x = -0.5;
+          L.position.x = (L.userData.x0 ?? 0) + 0.14 + d;
+          R.position.x = (R.userData.x0 ?? 0) - 0.14 - d;
+        } else if (ativo.nome === "dedo") {
+          // Braço ESTICADO na cara de quem está do outro lado. Parado, com o
+          // cotovelo dobrado, não lia como gesto nenhum.
+          //
+          // Em repouso o braço faz um L: úmero para baixo, antebraço na
+          // horizontal. Girar o ombro -1.02 deita o úmero para a frente, e o
+          // cotovelo +1.02 desfaz a dobra — aí o braço fica reto.
+          const empurra = Math.sin(nowMs * 0.012) * 0.14; // estoca e volta
+          R.rotation.x = (-1.02 + empurra) * k;
+          R.rotation.z = -0.1 * k;
+          if (eR) eR.rotation.x = 1.02 * k;
+          if (mR) {
+            mR.rotation.set(-0.35 - 1.2 * k, 0, 0); // dedo apontando para cima
+            poseHand(mR, "dedo");
+          }
+        } else if (ativo.nome === "joinha") {
+          // mesmo braço reto, mão de lado e polegar para cima
+          const empurra = Math.sin(nowMs * 0.009) * 0.1;
+          R.rotation.x = (-0.95 + empurra) * k;
+          R.rotation.z = -0.2 * k;
+          if (eR) eR.rotation.x = 0.95 * k;
+          if (mR) {
+            // sem inclinar a mão: o polegar já sobe sozinho pelo pivô, e
+            // torcer o pulso jogava ele para trás
+            mR.rotation.set(-0.35 - 0.15 * k, 0, 0);
+            poseHand(mR, "joinha");
+          }
+        } else if (ativo.nome === "ele") {
+          // mão LEVANTADA ao lado da cabeça fazendo o L, palma para a frente
+          R.rotation.x = -2.15 * k;
+          R.rotation.z = -0.28 * k;
+          if (eR) eR.rotation.x = 0.2 * k;
+          if (mR) {
+            mR.rotation.set(-0.35 + 0.25 * k, 0, 0);
+            poseHand(mR, "ele");
+          }
+        }
+      }
+    }
+
+    // Rir: a boca abre e fecha e a cabeça joga para trás. Só a boca, a essa
+    // distância, era um pontinho que ninguém via.
+    const rindo = (s.body.userData.rir || 0) > nowMs;
+    const mouth = s.body.userData.mouth;
+    if (mouth) {
+      const bat = Math.abs(Math.sin(nowMs * 0.019));
+      const alvo = rindo ? 3 + bat * 5.5 : 1;
+      mouth.scale.y += (alvo - mouth.scale.y) * 0.3;
+      mouth.scale.x += ((rindo ? 1.5 : 1) - mouth.scale.x) * 0.3;
+    }
+    const head = s.body.userData.head;
+    if (head) {
+      const alvo = rindo ? -0.3 - Math.abs(Math.sin(nowMs * 0.019)) * 0.18 : 0;
+      head.rotation.x += (alvo - head.rotation.x) * 0.25;
+    }
+
+    // mentira: o nariz cresce e volta
+    const nose = s.body.userData.nose;
+    if (nose) {
+      const left = (s.body.userData.nariz || 0) - nowMs;
+      const cresc = left > 0 ? Math.sin((1 - left / 2600) * Math.PI) : 0;
+      // bem exagerado: é piada de Pinóquio, tem de dar para ver da outra
+      // ponta da mesa
+      nose.scale.set(1 + cresc * 0.8, 1 + cresc * 7.5, 1 + cresc * 0.8);
+      nose.position.z = 0.163 + cresc * 0.26;
     }
 
     // ao bater palma, a carta desce para a mesa
@@ -1350,6 +1690,7 @@ export function dispose() {
     renderer.domElement.removeEventListener("pointerup", onPointerUp);
     renderer.domElement.removeEventListener("pointerleave", onPointerUp);
     renderer.domElement.removeEventListener("dblclick", onDblClick);
+    renderer.domElement.removeEventListener("wheel", onWheel);
     renderer.domElement.removeEventListener("click", onClick);
     renderer.dispose();
     if (renderer.domElement.parentNode)

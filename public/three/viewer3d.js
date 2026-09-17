@@ -50,7 +50,6 @@ export function setLook(cfg) {
   body = buildCharacter({
     color: cfg.color ?? 0,
     look: cfg.look,
-    avatar: cfg.avatar,
     seed: 0,
   });
   scene.add(body);

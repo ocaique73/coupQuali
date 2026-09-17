@@ -159,6 +159,51 @@
                dentro dela, sumiam junto quando o jogador trocava para o 3D. -->
           <div id="centerBanner" class="centerBanner"></div>
 
+          <!-- Responder à ação. Fica DENTRO da área da mesa, no alto, e não
+               num modal: o modal cobria a mesa e o jogador perdia justamente
+               as animações que estava respondendo. -->
+          <div id="respHud" class="respHud hidden">
+            <div class="respTimer" id="respTimer">⏱ —</div>
+
+            <div id="reactionBox" class="responseBlock hidden">
+              <div id="pendingText" class="responseText"></div>
+
+              <div class="row respRow">
+                <button id="acceptBtn" class="btn ok big">✔ Aceitar</button>
+                <button id="contestBtn" class="btn danger big">
+                  ❗ Contestar
+                </button>
+                <button id="blockBtn" class="btn warn big">🛡️ Bloquear</button>
+              </div>
+
+              <div id="blockPickRow" class="row respRow hidden">
+                <button id="blockCaptainBtn" class="btn">
+                  ⚓ Bloquear como Capitão
+                </button>
+                <button id="blockAmbBtn" class="btn">
+                  🎭 Bloquear como Embaixador
+                </button>
+              </div>
+
+              <div id="reactionHint" class="responseHint"></div>
+            </div>
+
+            <div id="blockChallengeBox" class="responseBlock hidden">
+              <div id="blockText" class="responseText"></div>
+
+              <div class="row respRow">
+                <button id="blockAcceptBtn" class="btn ok big">
+                  ✔ Aceitar bloqueio
+                </button>
+                <button id="blockContestBtn" class="btn danger big">
+                  ❗ Contestar bloqueio
+                </button>
+              </div>
+
+              <div id="blockChallengeHint" class="responseHint"></div>
+            </div>
+          </div>
+
           <!-- Meus dados. Também fora das mesas, para valer no 2D e no 3D:
                em 1ª pessoa o meu próprio card não aparece na cena. -->
           <div id="meHud" class="meHud hidden">
@@ -213,52 +258,6 @@
     </div>
 
     <!-- Modal: responder à ação / ao bloqueio -->
-    <div id="responseModal" class="modal hidden">
-      <div class="modalCard responseCard">
-        <div class="respTimer" id="respTimer">⏱ —</div>
-
-        <div id="reactionBox" class="responseBlock hidden">
-          <h2 class="respHead">Responder à ação</h2>
-          <div id="pendingText" class="responseText"></div>
-
-          <div class="row respRow">
-            <button id="acceptBtn" class="btn ok big">✔ Aceitar</button>
-            <button id="contestBtn" class="btn danger big">
-              ❗ Contestar
-            </button>
-            <button id="blockBtn" class="btn warn big">🛡️ Bloquear</button>
-          </div>
-
-          <div id="blockPickRow" class="row respRow hidden">
-            <button id="blockCaptainBtn" class="btn">
-              ⚓ Bloquear como Capitão
-            </button>
-            <button id="blockAmbBtn" class="btn">
-              🎭 Bloquear como Embaixador
-            </button>
-          </div>
-
-          <div id="reactionHint" class="responseHint"></div>
-        </div>
-
-        <div id="blockChallengeBox" class="responseBlock hidden">
-          <h2 class="respHead">Responder ao bloqueio</h2>
-          <div id="blockText" class="responseText"></div>
-
-          <div class="row respRow">
-            <button id="blockAcceptBtn" class="btn ok big">
-              ✔ Aceitar bloqueio
-            </button>
-            <button id="blockContestBtn" class="btn danger big">
-              ❗ Contestar bloqueio
-            </button>
-          </div>
-
-          <div id="blockChallengeHint" class="responseHint"></div>
-        </div>
-      </div>
-    </div>
-
     <!-- Modal: editar nick e foto (só fora de partida) -->
     <div id="profileModal" class="modal hidden">
       <div class="modalCard profileCard">
