@@ -3,7 +3,7 @@
 const { now, cleanPid, randomPid, safeAvatarUrl, roomKeyFromPath } = require("./util");
 const {
   MAX_SEATS, RESPONSE_MS, PLAYER_COLORS,
-  SHIRTS, BODIES, SKINS, PROPS, HEADS,
+  SHIRTS, BODIES, SKINS, PROPS, HEADS, ESTILOS,
   CHAT_MAX, CHAT_MIN_MS, EMOTE_MIN_MS, EMOTES,
   LAMP_MIN_MS, LOOK_MIN_MS, LOOK_MAX, LAMP_MAX, AJUSTE_MIN_MS,
 } = require("./constants");
@@ -36,6 +36,7 @@ function limparLook(look, atual) {
         : atual.skin,
     prop: PROPS.includes(look.prop) ? look.prop : atual.prop,
     head: HEADS.includes(look.head) ? look.head : atual.head,
+    estilo: ESTILOS.includes(look.estilo) ? look.estilo : atual.estilo,
   };
 }
 

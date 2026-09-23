@@ -110,6 +110,8 @@ function defaultAppearance(colorIdx) {
     skin: colorIdx % SKINS,
     prop: colorIdx % 3 === 0 ? "smoke" : "none",
     head: HEADS[colorIdx % HEADS.length],
+    // alterna os dois desenhos: a mesa já nasce mostrando que existem dois
+    estilo: colorIdx % 2 ? "peca" : "fundido",
   };
 }
 

@@ -147,6 +147,7 @@ function redimensionar() {
 // Sem poder trocar aqui, seria preciso acertar num e descobrir depois que
 // quebrou noutro.
 const VARIACOES = [
+  ["estilo", "Estilo", [["fundido", "Detalhado"], ["peca", "Peça"]]],
   ["shirt", "Manga", [["short", "Curta"], ["long", "Longa"]]],
   ["body", "Corpo", [["thin", "Magro"], ["fat", "Gordo"]]],
   [
@@ -159,7 +160,14 @@ const VARIACOES = [
 
 const escolha = {
   color: 4,
-  look: { shirt: "short", body: "thin", skin: 2, prop: "none", head: "hair" },
+  look: {
+    estilo: "fundido",
+    shirt: "short",
+    body: "thin",
+    skin: 2,
+    prop: "none",
+    head: "hair",
+  },
 };
 
 function montarVariacoes() {

@@ -288,6 +288,26 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
       grava três bytes invisíveis na frente e o `JSON.parse` engasgava: o
       arquivo parecia perfeito na tela e a cena subia no padrão sem explicar
 
+## U. Os dois estilos de personagem
+
+- [x] U1. A referência trazia **dois conceitos**, e a rodada anterior fundiu os
+      dois num só. Agora são dois de verdade, e o jogador **escolhe**:
+      - **Detalhado** (`fundido`) — volumes que se emendam: tronco torneado que
+        escorre para o ombro, deltoide caído, cápsulas no braço, mão de carne
+        com cantos quebrados
+      - **Peça** (`peca`) — partes torneadas montadas, com a **junta à mostra**:
+        tronco em lâmina de corte oval, bola de ombro solta, cilindros de ponta
+        reta com esfera no cotovelo e no pulso, mão entalhada de aresta viva
+- [x] U2. Entrou como **opção de visual do jogador**, ao lado de camisa, corpo e
+      cabeça: aparece primeiro no editor de perfil (é a escolha que mais muda o
+      boneco), o servidor valida contra a lista e o visual padrão alterna entre
+      os dois — a mesa já nasce mostrando que existem dois
+- [x] U3. A **armação da mão é a mesma** nos dois: um pivô por dedo mais o
+      polegar. Só a geometria dentro dos pivôs muda, então bater na mesa,
+      apontar e fazer o L continuam funcionando nos dois estilos
+- [x] U4. As **barras da bancada valem nos dois**: acertar o braço num acerta no
+      outro, porque o que o estilo troca é a geometria, não as medidas
+
 ### O que ainda não foi visto rodando
 
 O servidor e a lógica foram testados: dois clientes de verdade numa sala, as

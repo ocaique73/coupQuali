@@ -10,6 +10,7 @@
   const PREV = document.getElementById("pfPreview3d");
   const MSG = document.getElementById("pfPreviewMsg");
   const PICKS = {
+    estilo: document.getElementById("pfEstilo"),
     color: document.getElementById("pfColor"),
     shirt: document.getElementById("pfShirt"),
     body: document.getElementById("pfBody"),
@@ -23,6 +24,10 @@
   const SKIN_HEX = ["#ffdbac", "#f1c9a0", "#e0a875", "#c68642", "#8d5524", "#4a2c14"];
 
   const OPCOES = {
+    estilo: [
+      { id: "fundido", label: "Detalhado" },
+      { id: "peca", label: "Peça" },
+    ],
     shirt: [
       { id: "short", label: "Curta" },
       { id: "long", label: "Longa" },
@@ -43,7 +48,14 @@
     ],
   };
 
-  const PADRAO_LOOK = { shirt: "short", body: "thin", skin: 1, prop: "none", head: "hair" };
+  const PADRAO_LOOK = {
+    estilo: "fundido",
+    shirt: "short",
+    body: "thin",
+    skin: 1,
+    prop: "none",
+    head: "hair",
+  };
   let look = Object.assign({}, PADRAO_LOOK);
   let color = 0;
   let taken = new Set();
@@ -92,7 +104,7 @@
       );
     });
 
-    for (const campo of ["shirt", "body", "head", "prop"]) {
+    for (const campo of ["estilo", "shirt", "body", "head", "prop"]) {
       PICKS[campo].innerHTML = "";
       for (const o of OPCOES[campo]) {
         PICKS[campo].appendChild(

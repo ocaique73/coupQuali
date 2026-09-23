@@ -33,6 +33,11 @@ const BODIES = ["thin", "fat"];
 const SKINS = 6; // índices 0..5, do mais claro ao mais escuro
 const PROPS = ["none", "smoke"];
 const HEADS = ["hair", "bald", "cap", "cowboy"];
+// Os dois desenhos do boneco. "fundido" é o detalhado, de volumes que se
+// emendam; "peca" é o montado de partes torneadas, com as juntas à mostra,
+// que lembra peça de tabuleiro. São conceitos diferentes de propósito — não
+// dá para servir os dois com um meio-termo.
+const ESTILOS = ["fundido", "peca"];
 
 const THEMES = ["politica", "qualitas"];
 const DEFAULT_THEME = "politica";
@@ -72,7 +77,7 @@ module.exports = {
   PAUSE_MAX_MS, ROOM_GRACE_MS,
   ROLES, MAX_SEATS, PLAYER_COLORS,
   THEMES, DEFAULT_THEME,
-  SHIRTS, BODIES, SKINS, PROPS, HEADS,
+  SHIRTS, BODIES, SKINS, PROPS, HEADS, ESTILOS,
   CHAT_MAX, CHAT_MIN_MS, EMOTE_MIN_MS, EMOTES,
   LAMP_MIN_MS, LOOK_MIN_MS, LOOK_MAX, LAMP_MAX, AJUSTE_MIN_MS,
 };
