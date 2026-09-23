@@ -15,4 +15,18 @@ function broadcast(room) {
   }
 }
 
-module.exports = { attach, broadcast, getIO: () => io };
+// Recado leve para o resto da sala, SEM passar pelo estado.
+//
+// Existe para o que muda a cada quadro do mouse: o empurrão na lâmpada e para
+// onde cada um está olhando. Um broadcast de estado inteiro por quadro
+// arrastaria a sala inteira, e nada disso é regra de jogo — se um pacote se
+// perder, a cena do outro só fica um piscar de olhos atrasada.
+function relay(room, exceptPid, evento, dados) {
+  if (!io) return;
+  for (const p of room.players) {
+    if (!p.connected || !p.socketId || p.id === exceptPid) continue;
+    io.to(p.socketId).emit(evento, dados);
+  }
+}
+
+module.exports = { attach, broadcast, relay, getIO: () => io };

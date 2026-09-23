@@ -39,11 +39,19 @@
     // ---- HUD ----
     hudEscala: 1.0,
 
+    // ---- revelação de carta ----
+    // Ritmo da virada (1 = padrão). Abaixo de 1 a carta vira mais rápido,
+    // acima de 1 mais devagar. Vale para o 2D e para o 3D.
+    revelaRitmo: 1.0,
+
     // ---- luz ----
     luzForca: 42, // foco de cima
     luzAlcance: 14,
     luzRebote: 13, // o feltro devolvendo luz nos rostos
     luzAmbiente: 1.0,
+    // O quanto a poça de luz PASSEIA pela mesa quando a lâmpada balança.
+    // Em 0 a luz fica pregada no centro (era o que acontecia antes).
+    luzPasseio: 3.2,
 
     // ---- mau contato ----
     piscaLigado: 1, // 0 desliga
@@ -85,6 +93,9 @@
     ["HUD", [
       ["hudEscala", "Tamanho do HUD", 0.6, 1.8, 0.02],
     ]],
+    ["Revelação de carta", [
+      ["revelaRitmo", "Ritmo da virada (1 = padrão)", 0.5, 2, 0.05],
+    ]],
     ["Lâmpada", [
       ["lampadaAltura", "Altura do teto", 2.5, 6, 0.05],
       ["lampadaFio", "Comprimento do fio", 0.3, 3, 0.05],
@@ -96,6 +107,7 @@
       ["luzAlcance", "Alcance do foco", 5, 30, 0.5],
       ["luzRebote", "Luz de baixo (rostos)", 0, 40, 0.5],
       ["luzAmbiente", "Luz ambiente", 0, 3, 0.05],
+      ["luzPasseio", "Luz passeia com o balanço", 0, 8, 0.1],
     ]],
     ["Mau contato", [
       ["piscaLigado", "Ligado (0 ou 1)", 0, 1, 1],

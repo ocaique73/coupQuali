@@ -296,13 +296,17 @@ socket.on("me", ({ pid }) => {
 });
 
 function aplicarEstado(s) {
-  const prev = state;
+  // Os eventos são separados ANTES de pintar: é neles que está escrito o que
+  // ainda é segredo. Pintando primeiro e olhando depois, o log, o descarte e
+  // o próximo modal já tinham contado o resultado antes de a carta virar.
+  const novos = novosEventos(s.events);
   state = s;
+  planejarSegredo(novos);
   renderAll();
   // a cena 3D recebe o MESMO estado; muda só o desenho
   push3D();
   // depois do render: os retângulos usados pelas animações já estão corretos
-  consumeEvents(s.events, prev);
+  for (const ev of novos) scheduleEvent(ev);
 }
 socket.on("state", aplicarEstado);
 
@@ -351,6 +355,7 @@ function mesaPlayers() {
     color: p.color ?? 0,
     look: p.look || null,
     connected: p.connected !== false,
+    yaw: p.yaw || 0, // para onde a cabeça dele está virada no 3D
     coins: null, // null = nem mostra
     aliveCount: 2, // ninguém está eliminado no lobby
     hand: [],
@@ -395,11 +400,11 @@ function seatMoneyRect(pid) {
   return FX.rect(s?.money) || seatRect(pid);
 }
 
-function consumeEvents(events) {
-  if (!events?.length) return;
+function novosEventos(events) {
+  if (!events?.length) return [];
 
   const fresh = events.filter((e) => e.seq > lastSeq);
-  if (!fresh.length) return;
+  if (!fresh.length) return [];
 
   const maxSeq = fresh[fresh.length - 1].seq;
 
@@ -407,16 +412,118 @@ function consumeEvents(events) {
   // marca como visto sem animar o histórico todo
   if (lastSeq === 0) {
     lastSeq = maxSeq;
-    return;
+    return [];
   }
   lastSeq = maxSeq;
 
-  for (const ev of fresh) scheduleEvent(ev);
+  casarProvas(fresh);
+  return fresh;
+}
+
+// A contestação e a carta que ela obriga a mostrar chegam como DOIS eventos.
+// Para quem está na mesa é uma cena só: aqui eles são amarrados, para que a
+// virada aconteça ANTES do veredito em vez de cada um animar por conta.
+function casarProvas(lista) {
+  for (let i = 0; i < lista.length; i++) {
+    const ev = lista[i];
+    if (ev.type !== "challenge_result" || ev.bluffCaught) continue;
+    for (let j = i + 1; j < lista.length; j++) {
+      const p = lista[j];
+      if (p.type === "challenge_result") break;
+      if (p.type === "reveal_replace" && p.playerId === ev.claimerId) {
+        ev.prova = p;
+        p.provaDe = ev.seq;
+        break;
+      }
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* segredo: a carta vira ANTES de o jogo contar o resultado             */
+/*                                                                      */
+/* O estado do servidor chega inteiro e de uma vez — mão já virada,     */
+/* descarte, log e o próximo modal com a resposta pronta. Se a tela     */
+/* pintasse tudo na hora, a virada da carta seria enfeite: o jogador já */
+/* teria lido o final em outro canto da tela antes de ver a animação.   */
+/*                                                                      */
+/* Enquanto uma revelação está no ar, isto fica preso:                  */
+/*  - a carta continua de costas na mesa (2D e 3D);                     */
+/*  - log e descarte param na última linha que já era pública;          */
+/*  - o próximo modal (perder influência, troca, vitória) só abre       */
+/*    depois: só de abrir, ele já dizia quem tinha perdido.             */
+/* ------------------------------------------------------------------ */
+
+const segredo = {
+  cartas: new Set(), // "pid:idx" que continuam de costas
+  aPartirDe: Infinity, // log/descarte com seq >= isto ficam escondidos
+  travas: 0,
+  prazo: 0,
+};
+
+function segredoAberto() {
+  return segredo.travas > 0;
+}
+function podeMostrar(item) {
+  return !(item?.seq >= segredo.aPartirDe);
+}
+function cartaEmSegredo(pid, idx) {
+  return segredo.cartas.has(`${pid}:${idx}`);
+}
+function assentoEmSegredo(pid) {
+  for (const k of segredo.cartas) if (k.startsWith(`${pid}:`)) return true;
+  return false;
+}
+
+// Decide o que fica escondido ANTES de a tela pintar o estado novo.
+function planejarSegredo(novos) {
+  for (const ev of novos) {
+    if (ev.type === "card_lost")
+      prenderSegredo(ev.seq, `${ev.playerId}:${ev.idx}`);
+    else if (ev.type === "challenge_result") prenderSegredo(ev.seq, null);
+    else if (ev.type === "reveal_replace" && !ev.provaDe)
+      prenderSegredo(ev.seq, null);
+  }
+}
+
+function prenderSegredo(seq, chave) {
+  segredo.travas++;
+  if (seq != null && seq < segredo.aPartirDe) segredo.aPartirDe = seq;
+  if (chave) segredo.cartas.add(chave);
+  document.body.classList.add("segredo");
+
+  // Rede de segurança: aba em segundo plano, pausa no meio da virada ou uma
+  // animação que nunca terminou não podem deixar a mesa congelada num estado
+  // velho. Passado o prazo, a verdade aparece de qualquer jeito.
+  clearTimeout(segredo.prazo);
+  segredo.prazo = setTimeout(abrirSegredo, 12_000);
+}
+
+function soltarSegredo(chave) {
+  if (chave) segredo.cartas.delete(chave);
+  segredo.travas = Math.max(0, segredo.travas - 1);
+  if (segredo.travas) return;
+  abrirSegredo();
+}
+
+// Acabou o suspense: a mesa conta tudo de uma vez.
+function abrirSegredo() {
+  clearTimeout(segredo.prazo);
+  segredo.travas = 0;
+  segredo.cartas.clear();
+  segredo.aPartirDe = Infinity;
+  document.body.classList.remove("segredo");
+  if (!state) return;
+  renderAll();
+  push3D();
 }
 
 function scheduleEvent(ev) {
-  // moedas atravessando a mesa, embaixador pegando carta, carta perdida
-  window.COUP3D?.onGameEvent(ev);
+  // moedas atravessando a mesa, embaixador pegando carta.
+  // A carta perdida NÃO passa por aqui: ela tem cena própria, e a cena 3D
+  // só é chamada depois da virada — senão a carta voava para o descarte
+  // mostrando o papel antes de alguém ver a revelação.
+  if (ev.type !== "card_lost") window.COUP3D?.onGameEvent(ev);
 
   switch (ev.type) {
     case "game_start":
@@ -534,31 +641,15 @@ function scheduleEvent(ev) {
       break;
 
     case "challenge_result":
-      FX.enqueue(() => {
-        const caught = ev.bluffCaught;
-        FX.banner({
-          title: caught
-            ? `❌ Blefe de ${ev.claimerNick} descoberto!`
-            : `✅ ${ev.claimerNick} tinha mesmo ${UI.rolePt(ev.claimRole)}`,
-          sub: caught
-            ? `${ev.challengerNick} contestou e ganhou`
-            : `${ev.challengerNick} contestou e perdeu`,
-          cls: caught ? "bad" : "good",
-          dur: 1900,
-        });
-        FX.shake(seatEls.get(caught ? ev.claimerId : ev.challengerId)?.root);
-      }, 1000);
+      agendarContestacao(ev);
       break;
 
     case "reveal_replace":
-      // prova a carta, devolve ao baralho e compra outra
-      FX.enqueue((sp) => {
-        FX.revealCard({
-          at: seatCardRect(ev.playerId, ev.idx),
-          role: ev.role,
-          dur: 950 * sp,
-        });
-      }, 1000);
+      // Prova a carta, devolve ao baralho e compra outra. A virada em si é
+      // parte da cena da contestação (agendarContestacao); aqui sobra o
+      // vaivém com o baralho. Se por algum motivo a prova chegar solta,
+      // ela ainda vira sozinha.
+      if (!ev.provaDe) agendarViradaSolta(ev);
       FX.enqueue((sp) => {
         FX.flyCard({
           from: seatCardRect(ev.playerId, ev.idx),
@@ -580,19 +671,7 @@ function scheduleEvent(ev) {
       break;
 
     case "card_lost":
-      FX.enqueue((sp) => {
-        FX.revealCard({
-          at: seatCardRect(ev.playerId, ev.idx),
-          role: ev.role,
-          dur: 1050 * sp,
-        });
-        FX.shake(seatEls.get(ev.playerId)?.root);
-        FX.floatText({
-          at: seatRect(ev.playerId),
-          text: `perdeu ${UI.rolePt(ev.role)}`,
-          cls: "cost",
-        });
-      }, 1150);
+      agendarPerda(ev);
       break;
 
     case "eliminated":
@@ -674,6 +753,8 @@ function scheduleEvent(ev) {
 
     case "paused":
       FX.clearQueue();
+      // a fila morreu no meio da virada: ninguém vai soltar o segredo depois
+      abrirSegredo();
       FX.banner({ title: `⏸ ${ev.byNick} pausou`, cls: "warn", dur: 1400 });
       break;
 
@@ -744,6 +825,151 @@ function scheduleEvent(ev) {
       FX.banner({ title: `${ev.nick} voltou para a fila`, cls: "warn", dur: 1200 });
       break;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* as cenas de revelação                                                */
+/*                                                                      */
+/* Regra: a CARTA conta o resultado, o texto só confirma. Cada cena tem */
+/* os mesmos três tempos — suspense, virada, veredito — e o suspense    */
+/* dura igual com blefe ou sem, senão o relógio entregaria a resposta   */
+/* antes da carta.                                                      */
+/* ------------------------------------------------------------------ */
+
+// Alguém contestou. Se o contestado tinha a carta, ela vira na mesa e ISSO
+// é a resposta; se estava blefando, não há o que virar e o suspense termina
+// na carta que não apareceu.
+function agendarContestacao(ev) {
+  const prova = ev.prova || null;
+  const T = FX.REVELA;
+
+  // 1) suspense — ninguém sabe ainda
+  FX.enqueue((sp) => {
+    FX.banner({
+      title: `❗ ${ev.challengerNick} contestou ${ev.claimerNick}`,
+      sub: `${ev.claimerNick} disse ter ${UI.rolePt(ev.claimRole)}...`,
+      cls: "warn",
+      dur: T.suspense * sp,
+    });
+    FX.ping(seatEls.get(ev.claimerId)?.root, "revealPulse", T.suspense * sp);
+    FX.suspenseCard({
+      at: seatCardRect(ev.claimerId, prova ? prova.idx : 0),
+      dur: T.suspense * sp,
+    });
+    window.COUP3D?.onSuspense?.(ev.claimerId, T.suspense * sp);
+  }, T.suspense);
+
+  // 2) a virada — só existe quando havia mesmo a carta
+  if (prova) {
+    FX.enqueue((sp) => {
+      FX.revealFlip({
+        at: seatCardRect(ev.claimerId, prova.idx),
+        role: prova.role,
+        tag: "TINHA MESMO",
+        cls: "ok",
+        dur: T.virada * sp,
+      });
+      window.COUP3D?.onRevelar?.(
+        ev.claimerId,
+        prova.idx,
+        prova.role,
+        "prova",
+        T.virada * sp,
+      );
+    }, T.virada);
+  }
+
+  // 3) veredito — o texto chega depois de todo mundo já ter visto
+  FX.enqueue((sp) => {
+    const caught = ev.bluffCaught;
+    FX.banner({
+      title: caught
+        ? `❌ Blefe de ${ev.claimerNick} descoberto!`
+        : `✅ ${ev.claimerNick} tinha mesmo ${UI.rolePt(ev.claimRole)}`,
+      sub: caught
+        ? `${ev.challengerNick} contestou e ganhou`
+        : `${ev.challengerNick} contestou e perdeu`,
+      cls: caught ? "bad" : "good",
+      dur: 1900,
+    });
+    FX.shake(seatEls.get(caught ? ev.claimerId : ev.challengerId)?.root);
+    FX.floatText({
+      at: seatRect(ev.claimerId),
+      text: caught ? "🤥 BLEFE" : `✔ ${UI.rolePt(ev.claimRole)}`,
+      cls: caught ? "cost" : "gain",
+    });
+    soltarSegredo(null);
+  }, T.leitura * 1.2);
+}
+
+// Prova que chegou sem a contestação junto (reconexão, evento perdido):
+// vira sozinha para não ficar uma carta trocando de mão sem explicação.
+function agendarViradaSolta(ev) {
+  const T = FX.REVELA;
+  FX.enqueue((sp) => {
+    FX.revealFlip({
+      at: seatCardRect(ev.playerId, ev.idx),
+      role: ev.role,
+      tag: "PROVADA",
+      cls: "ok",
+      dur: T.virada * sp,
+    });
+    window.COUP3D?.onRevelar?.(ev.playerId, ev.idx, ev.role, "prova", T.virada * sp);
+  }, T.virada);
+
+  FX.enqueue(() => soltarSegredo(null), T.leitura);
+}
+
+// A bancada (/teste) chama isto para ver a virada sem precisar de partida:
+// é o único jeito de acertar o ritmo olhando para ela em vez de adivinhar.
+window.__coupTesteRevelacao = (pid, idx = 0, role = "Duke") => {
+  if (!pid) return;
+  agendarPerda({ playerId: pid, nick: nickOf(pid), idx, role, seq: null });
+};
+
+// Alguém perdeu influência. A mesa vê a carta virar antes de saber qual foi:
+// é o momento mais tenso da partida e era justamente o que aparecia pronto.
+function agendarPerda(ev) {
+  const chave = `${ev.playerId}:${ev.idx}`;
+  const T = FX.REVELA;
+
+  FX.enqueue((sp) => {
+    FX.banner({
+      title: `🂠 ${ev.nick} vai revelar uma carta`,
+      sub: "qual será?",
+      cls: "warn",
+      dur: T.suspense * sp,
+    });
+    FX.ping(seatEls.get(ev.playerId)?.root, "revealPulse", T.suspense * sp);
+    FX.suspenseCard({
+      at: seatCardRect(ev.playerId, ev.idx),
+      dur: T.suspense * sp,
+    });
+    window.COUP3D?.onSuspense?.(ev.playerId, T.suspense * sp);
+  }, T.suspense);
+
+  FX.enqueue((sp) => {
+    FX.revealFlip({
+      at: seatCardRect(ev.playerId, ev.idx),
+      role: ev.role,
+      tag: "PERDIDA",
+      cls: "bad",
+      dur: T.virada * sp,
+    });
+    window.COUP3D?.onRevelar?.(ev.playerId, ev.idx, ev.role, "perda", T.virada * sp);
+  }, T.virada);
+
+  // só agora a mesa pode mostrar o estrago: carta morta, descarte e log
+  FX.enqueue(() => {
+    soltarSegredo(chave);
+    FX.shake(seatEls.get(ev.playerId)?.root);
+    FX.floatText({
+      at: seatRect(ev.playerId),
+      text: `perdeu ${UI.rolePt(ev.role)}`,
+      cls: "cost",
+    });
+    window.COUP3D?.onGameEvent?.(ev);
+  }, T.leitura);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1107,15 +1333,27 @@ function push3D() {
     targets,
     hideCards: hideMyCards,
     mesa: mesaPlayers(),
+    // cartas que a cena 3D ainda tem de manter de costas
+    segredo: [...segredo.cartas],
   });
 }
 
 // clicar no personagem no 3D escolhe o alvo, igual clicar no card no 2D.
 // Registrado aqui dentro porque o mode3d.js so carrega depois deste arquivo.
 function ligar3D() {
-  if (window.COUP3D && !window.COUP3D.pickTarget)
-    window.COUP3D.pickTarget = (pid) => pickTarget(pid);
+  if (!window.COUP3D || window.COUP3D.pickTarget) return;
+  window.COUP3D.pickTarget = (pid) => pickTarget(pid);
+
+  // A lâmpada e o olhar são da SALA, não de quem mexeu. Saem por um canal
+  // próprio, fora do estado: mudam a cada quadro do mouse, e um broadcast de
+  // estado inteiro por quadro arrastaria a partida de todo mundo.
+  window.COUP3D.enviarLampada = (d) => socket.emit("lamp", d);
+  window.COUP3D.enviarOlhar = (yaw) => socket.emit("look", { yaw });
 }
+
+// ...e a volta: o que os outros fizeram com a lâmpada e com a cabeça deles.
+socket.on("lamp", (d) => window.COUP3D?.lampadaDeFora?.(d));
+socket.on("look", (d) => window.COUP3D?.olharDeFora?.(d?.id, d?.yaw));
 
 els.acceptBtn.onclick = () => socket.emit("react", { decision: "accept" });
 els.contestBtn.onclick = () => socket.emit("react", { decision: "contest" });
@@ -1617,6 +1855,15 @@ function resetChoiceStyles() {
 
 function renderReactionBoxes() {
   const m = me();
+  // Com uma carta virando na mesa, a próxima pergunta espera: aparecer agora
+  // seria dizer o resultado antes da revelação e ainda roubar a atenção de
+  // quem está assistindo.
+  if (m && segredoAberto()) {
+    els.reactionBox.classList.add("hidden");
+    els.blockChallengeBox.classList.add("hidden");
+    els.respHud.classList.add("hidden");
+    return;
+  }
   if (!m || m.aliveCount <= 0) {
     els.reactionBox.classList.add("hidden");
     els.blockChallengeBox.classList.add("hidden");
@@ -1778,8 +2025,10 @@ function buildSeat(pid) {
   return refs;
 }
 
-function updateMiniCard(el, card, showRole) {
-  const alive = !!card?.alive;
+function updateMiniCard(el, card, showRole, oculta) {
+  // Enquanto a carta está virando na mesa, o card do assento finge que nada
+  // aconteceu: quem revela é a animação, não a lista.
+  const alive = oculta ? true : !!card?.alive;
   const roleToShow = card ? (showRole ? card.role : alive ? null : card.role) : null;
 
   const sig = `${roleToShow || "?"}|${alive}|${card ? 1 : 0}`;
@@ -1909,7 +2158,8 @@ function renderTable() {
     }
 
     const current = state.phase === "turn" && state.currentPlayerId === p.id;
-    const dead = p.aliveCount <= 0;
+    // a última carta ainda está virando: o assento não pode apagar antes
+    const dead = p.aliveCount <= 0 && !assentoEmSegredo(p.id);
 
     s.root.classList.toggle("me", p.id === myId);
     s.root.classList.toggle("current", current);
@@ -1985,17 +2235,20 @@ function renderTable() {
     }
 
     const showMy = p.id === myId && !hideMyCards;
-    updateMiniCard(s.cards[0], p.hand?.[0], showMy);
-    updateMiniCard(s.cards[1], p.hand?.[1], showMy);
+    updateMiniCard(s.cards[0], p.hand?.[0], showMy, cartaEmSegredo(p.id, 0));
+    updateMiniCard(s.cards[1], p.hand?.[1], showMy, cartaEmSegredo(p.id, 1));
   });
 }
 
 /* ---------------- listas / modais ---------------- */
 
 function renderLog() {
-  const items = state?.actionLog || [];
-  if (els.log.dataset.n === String(items.length)) return;
-  els.log.dataset.n = String(items.length);
+  // linhas nascidas de uma revelação que ainda não terminou ficam de fora:
+  // o log era o vazamento mais rápido de todos
+  const items = (state?.actionLog || []).filter(podeMostrar);
+  const sig = `${items.length}|${items[items.length - 1]?.seq ?? ""}`;
+  if (els.log.dataset.n === sig) return;
+  els.log.dataset.n = sig;
 
   els.log.innerHTML = "";
   for (const it of items) {
@@ -2008,9 +2261,11 @@ function renderLog() {
 }
 
 function renderDiscard() {
-  const items = state?.discard || [];
-  if (els.discard.dataset.n === String(items.length)) return;
-  els.discard.dataset.n = String(items.length);
+  // a carta só entra na lista depois de virar na mesa
+  const items = (state?.discard || []).filter(podeMostrar);
+  const sig = `${items.length}|${items[items.length - 1]?.seq ?? ""}`;
+  if (els.discard.dataset.n === sig) return;
+  els.discard.dataset.n = sig;
 
   els.discard.innerHTML = "";
   if (!items.length) {
@@ -2038,6 +2293,9 @@ function renderLossModal() {
     return;
   }
   if (!els.lossModal.classList.contains("hidden")) return; // já aberto
+  // Espera a carta terminar de virar. Só o modal ABRIR já dizia quem tinha
+  // perdido a contestação, antes de a mesa ver qualquer coisa.
+  if (segredoAberto()) return;
 
   els.lossReason.textContent = lf.reason;
   els.lossChoices.innerHTML = "";
@@ -2062,6 +2320,7 @@ function renderExchangeModal() {
     return;
   }
   if (!els.exchangeModal.classList.contains("hidden")) return; // já aberto
+  if (segredoAberto()) return; // a virada da carta vem primeiro
 
   els.exchangeInfo.textContent = `Escolha ${ex.keepCount} carta(s) para manter. As outras voltam para o baralho.`;
   els.exchangeChoices.innerHTML = "";
@@ -2133,7 +2392,9 @@ function renderMeHud() {
 
   const sig = [
     m.nick, m.coins, m.avatar || "", m.color,
-    (m.hand || []).map((c) => (c.role || "?") + "|" + c.alive).join(","),
+    (m.hand || [])
+      .map((c, i) => (c.role || "?") + "|" + (c.alive || cartaEmSegredo(myId, i)))
+      .join(","),
     hideMyCards, state.currentPlayerId === myId, UI.theme,
   ].join("|");
   if (els.meHud.dataset.sig === sig) return;
@@ -2150,15 +2411,17 @@ function renderMeHud() {
   els.meCoinsN.textContent = String(m.coins);
 
   els.meCards.innerHTML = "";
-  for (const c of m.hand || []) {
+  (m.hand || []).forEach((c, i) => {
     const d = document.createElement('div');
     const mostrar = hideMyCards ? null : c.role;
-    d.className = "meCard " + (mostrar ? UI.roleClass(mostrar) : "back") + (c.alive ? "" : " dead");
+    // a minha carta só "morre" no HUD quando termina de virar na mesa
+    const viva = c.alive || cartaEmSegredo(myId, i);
+    d.className = "meCard " + (mostrar ? UI.roleClass(mostrar) : "back") + (viva ? "" : " dead");
     d.innerHTML = mostrar
       ? UI.roleArt(mostrar) + "<span>" + UI.escape(UI.rolePt(mostrar)) + "</span>"
       : '<span class="meBack">C</span>';
     els.meCards.appendChild(d);
-  }
+  });
 
   els.meTurn.classList.toggle(
     "hidden",
@@ -2181,6 +2444,8 @@ function renderWinner() {
   }
 
   if (!els.winnerOverlay.classList.contains("hidden")) return; // já aberto
+  // a carta que decidiu a partida vira primeiro; o troféu vem depois
+  if (segredoAberto()) return;
 
   els.winnerName.textContent = w.nick;
   els.winnerOverlay.classList.toggle("isMe", w.playerId === myId);

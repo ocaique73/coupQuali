@@ -5,6 +5,7 @@ const {
   MAX_SEATS, RESPONSE_MS, PLAYER_COLORS,
   SHIRTS, BODIES, SKINS, PROPS, HEADS,
   CHAT_MAX, CHAT_MIN_MS, EMOTE_MIN_MS, EMOTES,
+  LAMP_MIN_MS, LOOK_MIN_MS, LOOK_MAX, LAMP_MAX,
 } = require("./constants");
 const {
   getRoom, addLog, pushEvent, findPlayer,
@@ -12,7 +13,7 @@ const {
   removeRoomIfEmpty, defaultAppearance, colorFree,
 } = require("./rooms");
 const { actionRequiresClaim, claimRoleForAction, actionBlockInfo } = require("./rules");
-const { broadcast } = require("./net");
+const { broadcast, relay } = require("./net");
 const {
   isPaused, pauseGame, resumeGame, endToLobby, startGame,
   applyImmediateAction, resolveReaction, resolveBlockChallenge,
@@ -35,6 +36,15 @@ function limparLook(look, atual) {
     prop: PROPS.includes(look.prop) ? look.prop : atual.prop,
     head: HEADS.includes(look.head) ? look.head : atual.head,
   };
+}
+
+// Número do navegador dentro de um teto, ou nada. O servidor não confia no
+// cliente nem para o balanço de uma lâmpada: um valor absurdo vindo de uma
+// aba adulterada jogaria o abajur para fora da sala na tela de todos.
+function limparAngulo(v, teto) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(-teto, Math.min(teto, n));
 }
 
 function register(io) {
@@ -283,6 +293,55 @@ function register(io) {
       broadcast(room);
     });
   
+    /* ---------------- lâmpada e olhar: a cena, não o jogo ---------------- */
+
+    // A lâmpada é da SALA. Quem empurra manda o ângulo e a velocidade; os
+    // outros recebem e a física de cada cena segue dali. Sincronizar o
+    // empurrão em vez de cada quadro do balanço é o que deixa todos verem o
+    // mesmo movimento sem mandar 60 pacotes por segundo.
+    socket.on("lamp", (d) => {
+      if (!joinedRoomKey) return;
+      const room = getRoom(joinedRoomKey);
+      const p = findPlayer(room, myPid);
+      if (!p || !p.connected) return;
+
+      const z = limparAngulo(d?.z, LAMP_MAX);
+      const x = limparAngulo(d?.x, LAMP_MAX);
+      if (z === null || x === null) return;
+      // a velocidade tem teto próprio: é ela que dá o tamanho do balanço
+      const vz = limparAngulo(d?.vz, 6) ?? 0;
+      const vx = limparAngulo(d?.vx, 6) ?? 0;
+      const solta = !!d?.solta;
+
+      // "solta" (largou o abajur) sempre passa: é o pacote que fecha o gesto
+      if (!solta && now() - (p.lastLampAt || 0) < LAMP_MIN_MS) return;
+      p.lastLampAt = now();
+
+      // guardado na sala para quem entrar depois já achar a lâmpada onde ela
+      // está, em vez de pendurada reta enquanto o resto da mesa a vê torta
+      room.lamp = { z, x, vz, vx, ts: now() };
+      relay(room, p.id, "lamp", { z, x, vz, vx, solta, byId: p.id });
+    });
+
+    // Para onde cada um está olhando. Vale para todo mundo: a cabeça do boneco
+    // vira na tela dos outros, senão só quem gira a câmera sabe que girou.
+    socket.on("look", (d) => {
+      if (!joinedRoomKey) return;
+      const room = getRoom(joinedRoomKey);
+      const p = findPlayer(room, myPid);
+      if (!p || !p.connected) return;
+
+      const yaw = limparAngulo(d?.yaw, LOOK_MAX);
+      if (yaw === null) return;
+      if (now() - (p.lastLookAt || 0) < LOOK_MIN_MS) return;
+      p.lastLookAt = now();
+
+      // Fica no jogador (e não só no recado) para entrar no estado: quem
+      // chega no meio da partida vê as cabeças já viradas.
+      p.yaw = yaw;
+      relay(room, p.id, "look", { id: p.id, yaw });
+    });
+
     socket.on("pause", () => {
       if (!joinedRoomKey) return;
       const room = getRoom(joinedRoomKey);

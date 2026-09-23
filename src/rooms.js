@@ -41,6 +41,10 @@ function getRoom(key) {
       eventSeq: 0,
       winner: null,
 
+      // Balanço da lâmpada: é da SALA, não de quem empurrou. Guardado aqui
+      // para quem chega depois encontrar o abajur onde os outros o veem.
+      lamp: null, // { z, x, vz, vx, ts }
+
       paused: null, // { at, byNick, untilAt }
       emptySince: 0,
       theme: DEFAULT_THEME,
@@ -49,8 +53,11 @@ function getRoom(key) {
   return rooms.get(key);
 }
 
+// O `seq` amarra a linha do log ao evento que a gerou. O cliente usa isso
+// para segurar o texto enquanto a carta ainda está virando na mesa: sem a
+// amarra, o log contava o resultado antes de a animação acontecer.
 function addLog(room, text) {
-  room.actionLog.push({ ts: now(), text });
+  room.actionLog.push({ ts: now(), seq: room.eventSeq, text });
 }
 
 // Eventos estruturados: o cliente usa isso para saber O QUE aconteceu

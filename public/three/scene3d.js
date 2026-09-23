@@ -6,9 +6,11 @@
 // um, esconder cartas, terceira pessoa, tema e gestos do chat rápido.
 //
 // API:
-//   init(el, { onPickTarget })
+//   init(el, { onPickTarget, onLamp, onLook })
 //   update(state, myId, opts)   opts: { theme, thirdPerson, targets, mesa }
 //   emote(ev) / gameEvent(ev) / resize() / dispose()
+//   revelar(pid, idx, role, tipo, ms) / suspense(pid, ms)  — virada da carta
+//   lampadaDeFora(d) / olharDeFora(pid, yaw)  — o que a sala fez, chegando
 
 import * as THREE from "three";
 
@@ -29,6 +31,10 @@ let table, tableTop, tableRim, tableBase, deckMesh, bankGroup;
 let raf = 0;
 let disposed = false;
 let onPickTarget = null;
+// Avisos para fora da cena: o empurrão na lâmpada e para onde eu estou
+// olhando. A cena não conhece socket — o client.js pluga estes dois.
+let onLamp = null;
+let onLook = null;
 
 const seats = new Map(); // playerId -> refs
 const texLoader = new THREE.TextureLoader();
@@ -51,8 +57,20 @@ const lampDrag = { ativo: false, x: 0, z: 0, lx: 0, ly: 0 };
 // e parar de uma vez.
 const lampFis = { z: 0, x: 0, vz: 0, vx: 0, t0: 0 };
 const LAMP_MAX = 0.55; // até onde dá para empurrar, em radianos
+// Altura do pescoço: é em volta deste ponto que a cabeça vira.
+const PESCOCO = 1.62;
+// Até onde a cabeça vira para os lados (~52°) e para cima/baixo. A mesa gira
+// infinito; o pescoço tem limite, senão o boneco dava a volta no próprio eixo.
+const OLHAR_MAX = 0.92;
+const OLHAR_MAX_Y = 0.42;
 const flying = []; // moedas/cartas em movimento pela mesa
 const pops = []; // símbolos de gesto subindo acima do jogador
+// Cartas virando na mesa agora. Enquanto uma está aqui, o updateCards não
+// encosta nela: quem manda no desenho é a animação.
+const virando = new Map(); // mesh -> { t, dur, role, volta, seat }
+// "pid:idx" que a mesa tem de manter de costas até a virada terminar —
+// o cliente 2D decide e manda junto com o estado.
+let segredo = new Set();
 
 // Um número da bancada (public/ajustes3d.js). Se a bancada não carregou,
 // cai no valor de reserva e a cena monta igual — nada aqui pode depender
@@ -74,8 +92,10 @@ const pointer = new THREE.Vector2();
 // zoom aproxima ou afasta. Nada disso revela carta de ninguém: a carta viva
 // de outro jogador nunca chega a receber a arte (ver updateCards).
 //
-// Girar vale SÓ em 3ª pessoa. Em 1ª pessoa a câmera é o olho do jogador
-// sentado; girar dava a impressão de ter trocado de lugar na mesa.
+// Girar A MESA vale só em 3ª pessoa: em 1ª a câmera é o olho de quem está
+// sentado, e girá-la dava a impressão de ter trocado de lugar. O que a 1ª
+// pessoa faz com o arraste é virar a CABEÇA, com limite de pescoço — dá para
+// olhar para os lados sem levantar da cadeira.
 const orbit = {
   yaw: 0,
   pitch: 0,
@@ -85,6 +105,30 @@ const orbit = {
   ly: 0,
   andou: 0, // pixels percorridos desde que apertou
 };
+
+// Para onde EU estou olhando, em radianos, relativo a olhar para o centro da
+// mesa. Em 1ª pessoa vem do arraste; em 3ª acompanha o giro da câmera, preso
+// ao limite do pescoço. Vai para o servidor para os outros verem minha cabeça
+// virar — sem isso, só eu sabia que tinha olhado para o lado.
+const olhar = { yaw: 0, pitch: 0, enviadoYaw: 0, enviadoEm: 0 };
+const EIXO_Y = new THREE.Vector3(0, 1, 0);
+
+// Ângulo de volta para a faixa -PI..PI. A mesa gira infinito, então orbit.yaw
+// cresce sem parar; o pescoço precisa do valor "de verdade" para saber que já
+// chegou no limite.
+function voltaPi(a) {
+  return Math.atan2(Math.sin(a), Math.cos(a));
+}
+const trava = (v, m) => Math.max(-m, Math.min(m, v));
+
+// Quanto a minha cabeça está virada agora. Em 3ª pessoa o giro da mesa é
+// infinito mas a cabeça para no limite: o boneco olha para onde a câmera
+// olha até onde o pescoço alcança.
+function meuOlhar() {
+  return thirdPerson
+    ? trava(voltaPi(orbit.yaw), OLHAR_MAX)
+    : trava(olhar.yaw, OLHAR_MAX);
+}
 const PITCH_MIN = -0.25;
 const PITCH_MAX = 0.55;
 const ZOOM_MIN = 0.55;
@@ -406,11 +450,14 @@ function buildLamp() {
   // Luz baixa: acende a mesa e deixa o resto da sala no escuro.
   lampLight = new THREE.SpotLight(0xffc987, 42, 14, Math.PI / 3.4, 0.62, 1.3);
   lampLight.position.set(0, -0.12, 0);
-  lampLight.target.position.set(0, -4, 0);
   lampLight.castShadow = true;
   lampLight.shadow.mapSize.set(1024, 1024);
   lamp.add(lampLight);
-  lamp.add(lampLight.target);
+  // O alvo fica na CENA, não dentro da lâmpada: pendurado nela, girava junto
+  // com o abajur e a direção da luz nunca mudava de verdade. Quem o move é o
+  // laço de animação, para o ponto do tampo onde o abajur está apontando.
+  lampLight.target.position.set(0, tampo(), 0);
+  scene.add(lampLight.target);
 
   lampPivot.add(lamp);
 
@@ -674,11 +721,27 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
   neck.position.y = 1.56;
   g.add(neck);
 
+  // A CABEÇA INTEIRA num pivô no pescoço, para poder virar para os lados.
+  //
+  // Antes cada peça do rosto era filha do corpo, e girar só a esfera do
+  // crânio deixava olhos, nariz e boca parados no lugar — a cabeça girava
+  // vazia. São dois grupos: `cabeca` fica na altura do pescoço (é em volta
+  // dela que o giro acontece) e `rosto` desfaz essa subida, para cada peça
+  // continuar escrita nas alturas de sempre.
+  const cabeca = new THREE.Group();
+  cabeca.position.y = PESCOCO;
+  const rosto = new THREE.Group();
+  rosto.position.y = -PESCOCO;
+  cabeca.add(rosto);
+  g.add(cabeca);
+  g.userData.cabeca = cabeca;
+  g.userData.rosto = rosto;
+
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 26, 22), skinMat);
   head.scale.set(0.92, 1.1, 0.96);
   head.position.y = 1.74;
   head.castShadow = true;
-  g.add(head);
+  rosto.add(head);
 
   g.userData.head = head;
 
@@ -686,13 +749,13 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
     const ear = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), skinMat);
     ear.scale.set(0.5, 1, 0.7);
     ear.position.set(sx * 0.152, 1.74, 0);
-    g.add(ear);
+    rosto.add(ear);
   }
 
   const nose = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.07, 10), skinMat);
   nose.rotation.x = Math.PI / 2;
   nose.position.set(0, 1.73, 0.163);
-  g.add(nose);
+  rosto.add(nose);
   g.userData.nose = nose; // cresce no gesto de "mentira"
 
   const eyeW = new THREE.MeshStandardMaterial({ color: 0xf7f7f7, roughness: 0.25 });
@@ -701,16 +764,16 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
     const w = new THREE.Mesh(new THREE.SphereGeometry(0.032, 14, 12), eyeW);
     w.scale.set(1, 0.72, 0.6);
     w.position.set(sx * 0.062, 1.79, 0.146);
-    g.add(w);
+    rosto.add(w);
 
     const d = new THREE.Mesh(new THREE.SphereGeometry(0.0155, 10, 8), eyeD);
     d.position.set(sx * 0.062, 1.79, 0.167);
-    g.add(d);
+    rosto.add(d);
 
     const br = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.013, 0.02), hairMat);
     br.position.set(sx * 0.062, 1.829, 0.151);
     br.rotation.z = sx * 0.12;
-    g.add(br);
+    rosto.add(br);
   }
 
   const mouth = new THREE.Mesh(
@@ -718,15 +781,16 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
     new THREE.MeshStandardMaterial({ color: 0x7a3b3b, roughness: 0.5 }),
   );
   mouth.position.set(0, 1.676, 0.152);
-  g.add(mouth);
+  rosto.add(mouth);
   g.userData.mouth = mouth; // abre e fecha no gesto de rir
 
   const chin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 14, 10), skinMat);
   chin.scale.set(1, 0.6, 0.85);
   chin.position.set(0, 1.645, 0.06);
-  g.add(chin);
+  rosto.add(chin);
 
-  montarCabeca(g, L.head || "hair", hairMat, skinMat, darkMat);
+  // cabelo, boné e chapéu também vão no pivô: viram junto com o rosto
+  montarCabeca(rosto, L.head || "hair", hairMat, skinMat, darkMat);
 
   // Braço ESQUERDO segura as cartas; o DIREITO fica livre para os gestos.
   //
@@ -828,7 +892,9 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
     }
     prop.userData.puffs = puffs;
   }
-  g.add(prop);
+  // O cigarro está na BOCA: entra no pivô da cabeça, senão ficava flutuando
+  // parado no ar quando o jogador virava o rosto.
+  (g.userData.rosto || g).add(prop);
   g.userData.prop = prop;
 
   return g;
@@ -989,6 +1055,7 @@ function buildSeat(p, idx, total) {
   refs.hit.userData.pid = p.id;
   g.add(refs.hit);
 
+  refs.id = p.id;
   scene.add(g);
   return refs;
 }
@@ -1023,8 +1090,13 @@ function updateChips(seat, coins) {
 }
 
 function updateCards(seat, p) {
+  // O segredo entra na assinatura: quando ele cai, a mesa se redesenha e a
+  // carta finalmente aparece morta.
+  const oculta = (i) => segredo.has(`${p.id}:${i}`);
   const sig =
-    (p.hand || []).map((c) => `${c.role || "?"}|${c.alive}`).join(",") +
+    (p.hand || [])
+      .map((c, i) => `${c.role || "?"}|${c.alive || oculta(i)}`)
+      .join(",") +
     "|" +
     theme;
   if (seat.sig === sig) return;
@@ -1033,24 +1105,132 @@ function updateCards(seat, p) {
   (p.hand || []).forEach((c, i) => {
     const mesh = seat.cards[i];
     if (!mesh) return;
+    // está virando neste instante: a animação é dona do mesh
+    if (virando.has(mesh)) return;
 
     // Na mesa, carta viva fica SEMPRE virada para baixo — a minha também,
     // porque eu leio as minhas no HUD. A perdida vira para cima, de lado,
     // para a mesa inteira ver o que caiu.
-    const show = c.alive ? null : c.role;
+    const viva = c.alive || oculta(i);
+    const show = viva ? null : c.role;
 
-    if (show) {
-      mesh.material.map = cardTexture(cardUrl(show));
-      mesh.material.color.set(0xffffff);
-    } else {
-      mesh.material.map = null;
-      mesh.material.color.set(0x16213a);
-    }
-    mesh.material.needsUpdate = true;
-    mesh.rotation.z = c.alive ? 0 : 0.42;
+    porCartaPraCima(mesh, show);
+    mesh.rotation.z = viva ? 0 : 0.42;
     mesh.material.opacity = 1;
     mesh.material.transparent = false;
   });
+}
+
+// Pinta o mesh da carta: com papel (face para cima) ou sem (dorso).
+//
+// O plano é um só, com material DoubleSide — girar 180° mostraria a MESMA
+// arte espelhada. O scale.x negativo desfaz esse espelho, e a troca acontece
+// com a carta de perfil, onde ninguém vê.
+function porCartaPraCima(mesh, role, espelhado = false) {
+  if (role) {
+    mesh.material.map = cardTexture(cardUrl(role));
+    mesh.material.color.set(0xffffff);
+  } else {
+    mesh.material.map = null;
+    mesh.material.color.set(0x16213a);
+  }
+  mesh.material.needsUpdate = true;
+  // o sinal inverte o espelho, o módulo preserva o tamanho vindo da bancada
+  mesh.scale.x = (espelhado ? -1 : 1) * Math.abs(mesh.scale.y || 1);
+  if (!espelhado) mesh.rotation.y = 0;
+}
+
+// Aquele assento ainda tem carta em segredo (virando ou esperando virar)?
+function assentoOculto(pid) {
+  return segredo.has(`${pid}:0`) || segredo.has(`${pid}:1`);
+}
+
+/* ------------------------------------------------------------------ */
+/* a virada da carta na mesa                                           */
+/*                                                                     */
+/* É o momento de suspense do jogo: a carta sobe do tampo, gira de     */
+/* verdade e só então mostra o papel. Antes ela simplesmente trocava de */
+/* textura entre dois quadros e não havia nada para ver.               */
+/* ------------------------------------------------------------------ */
+
+function ritmoRevela() {
+  const v = aj("revelaRitmo", 1);
+  return v > 0 ? v : 1;
+}
+
+// A carta treme na mesa antes de virar: o "vai ou não vai".
+//
+// O `ms` vem da fila de animações do 2D. É ela quem manda no ritmo — quando
+// muita coisa acontece de uma vez a fila acelera, e a mesa 3D tem de acelerar
+// junto, senão as duas telas contam a mesma jogada em tempos diferentes.
+export function suspense(pid, ms) {
+  const seat = seats.get(pid);
+  if (!seat) return;
+  seat.tremeAte = performance.now() + (ms || 750 * ritmoRevela()) * 1.3;
+}
+
+// Vira a carta `idx` do jogador. `tipo` = "perda" (fica virada para cima,
+// caída de lado) ou "prova" (mostra e volta a deitar de costas).
+export function revelar(pid, idx, role, tipo = "perda", ms) {
+  const seat = seats.get(pid);
+  const mesh = seat?.cards?.[idx];
+  if (!mesh) return;
+
+  seat.tremeAte = 0;
+  seat.cartas.rotation.z = 0;
+  virando.set(mesh, {
+    t: 0,
+    dur: ((ms || 1500 * ritmoRevela()) * 1.3) / 1000,
+    role,
+    volta: tipo === "prova",
+    seat,
+    z0: mesh.position.z,
+  });
+  porCartaPraCima(mesh, null);
+  mesh.rotation.z = 0;
+}
+
+// Roda um quadro de cada carta virando. Chamada pelo laço de animação.
+function passoDasViradas(dt) {
+  for (const [mesh, v] of virando) {
+    v.t += dt;
+    const k = Math.min(1, v.t / v.dur);
+
+    // sobe do tampo, fica no ar enquanto a mesa lê e desce no fim
+    const alto = Math.sin(Math.min(1, k / 0.95) * Math.PI) * 0.16;
+    mesh.position.z = v.z0 + alto;
+
+    // As mesmas fatias do 2D: 22% recuando, 33% girando, o resto parada de
+    // frente para a mesa inteira ler. Se os dois não baterem, quem joga em
+    // 3D vê a carta em outro tempo de quem joga em 2D.
+    let giro = 0;
+    if (k < 0.22) giro = -0.28 * (k / 0.22); // recua para pegar impulso
+    else if (k < 0.55) {
+      const g = (k - 0.22) / 0.33;
+      giro = -0.28 + (Math.PI + 0.28) * (g * g * (3 - 2 * g));
+    } else giro = Math.PI;
+    mesh.rotation.y = giro;
+
+    // troca a arte com a carta de perfil, onde a troca não aparece
+    if (!v.trocou && giro >= Math.PI / 2) {
+      v.trocou = true;
+      porCartaPraCima(mesh, v.role, true);
+    }
+
+    if (k >= 1) {
+      virando.delete(mesh);
+      if (v.volta) {
+        // era só prova: volta a deitar de costas, como toda carta viva
+        porCartaPraCima(mesh, null);
+        mesh.rotation.y = 0;
+        mesh.rotation.z = 0;
+      } else {
+        mesh.rotation.z = 0.42;
+      }
+      mesh.position.z = v.z0;
+      if (v.seat) v.seat.sig = ""; // deixa o updateCards assumir de novo
+    }
+  }
 }
 
 function bankPos() {
@@ -1111,6 +1291,90 @@ function flyCardMesh(from, to, role, delay = 0) {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* a lâmpada é da SALA                                                 */
+/*                                                                     */
+/* Quem empurra manda o ângulo e a velocidade; os outros recebem e a    */
+/* física de cada cena segue dali. É o empurrão que viaja, não cada     */
+/* quadro do balanço — 60 pacotes por segundo por pessoa derrubariam a  */
+/* sala, e o pêndulo é a mesma conta em todas as telas.                 */
+/* ------------------------------------------------------------------ */
+
+// De fora chega bem mais rápido do que a sala precisa ver; este é o freio.
+const LAMP_ENVIO_MS = 60;
+let lampEnviadoEm = 0;
+// a lâmpada da sala já foi aplicada uma vez nesta cena?
+let lampPronta = false;
+// Até quando obedecer à mão de OUTRA pessoa. Enquanto alguém segura o abajur,
+// a física daqui fica parada: sem isso, entre um pacote e outro o pêndulo
+// local puxava a lâmpada de volta ao centro e ela tremia na mão do outro.
+let lampSeguradaAte = 0;
+
+function mandarLampada(solta) {
+  if (!onLamp) return;
+  const agora = performance.now();
+  // "solta" é o fim do gesto: passa sempre, senão o último empurrão (o que
+  // define o tamanho do balanço) podia ser justamente o que o freio comeu
+  if (!solta && agora - lampEnviadoEm < LAMP_ENVIO_MS) return;
+  lampEnviadoEm = agora;
+  onLamp({
+    z: lampFis.z,
+    x: lampFis.x,
+    // Enquanto a mão está no abajur a física fica congelada dos dois lados,
+    // então a velocidade guardada é lixo velho: vai zero e o outro lado só
+    // segue a posição. O pêndulo recomeça para todos no "solta", do mesmo
+    // ângulo — a conta é a mesma, o balanço sai igual em todas as telas.
+    vz: 0,
+    vx: 0,
+    solta: !!solta,
+  });
+}
+
+// Alguém na sala empurrou a lâmpada (ou eu acabei de entrar e ela já estava
+// balançando). Aqui a cena entra no mesmo balanço.
+export function lampadaDeFora(d) {
+  if (!lampPivot || !d) return;
+  // quem está com a mão no abajur manda, não obedece
+  if (lampDrag.ativo) return;
+  const n = (v, m) => (Number.isFinite(Number(v)) ? trava(Number(v), m) : 0);
+  lampFis.z = n(d.z, LAMP_MAX);
+  lampFis.x = n(d.x, LAMP_MAX);
+  lampFis.vz = n(d.vz, 6);
+  lampFis.vx = n(d.vx, 6);
+  if (d.solta) {
+    // largou: daqui em diante é o pêndulo de cada cena, e ele parte do mesmo
+    // ângulo em todas — a conta é a mesma, então o balanço sai igual
+    lampSeguradaAte = 0;
+    const forca = Math.min(1, Math.abs(lampFis.z) / LAMP_MAX);
+    lampKick.t = performance.now() + 1200 + forca * 2400;
+  } else {
+    // ainda segurando do outro lado: segue a mão dele, sem pêndulo. O prazo
+    // é a rede de segurança para quem largou e cujo "solta" se perdeu.
+    lampSeguradaAte = performance.now() + 400;
+  }
+}
+
+// Alguém virou a cabeça. Chega por fora do estado para a cabeça acompanhar o
+// mouse do outro, e não só a cada pacote de estado.
+export function olharDeFora(pid, yaw) {
+  const s = seats.get(pid);
+  if (!s || pid === myId) return;
+  s.olharAlvo = trava(Number(yaw) || 0, OLHAR_MAX);
+}
+
+// Manda o meu olhar quando ele muda de verdade. Sem o filtro, um mouse
+// parado ainda mandaria pacote a cada quadro.
+function mandarOlhar() {
+  if (!onLook) return;
+  const y = meuOlhar();
+  const agora = performance.now();
+  if (Math.abs(y - olhar.enviadoYaw) < 0.015) return;
+  if (agora - olhar.enviadoEm < 70) return;
+  olhar.enviadoYaw = y;
+  olhar.enviadoEm = agora;
+  onLook(y);
+}
+
 // Eventos do jogo que viram movimento na mesa.
 export function gameEvent(ev) {
   if (!scene) return;
@@ -1157,9 +1421,30 @@ function onPointerMove(e) {
     const dy = e.clientY - lampDrag.ly;
     lampDrag.lx = e.clientX;
     lampDrag.ly = e.clientY;
-    const lim = (v) => Math.max(-LAMP_MAX, Math.min(LAMP_MAX, v));
-    lampFis.z = lim(lampFis.z - dx * 0.004);
-    lampFis.x = lim(lampFis.x + dy * 0.004);
+
+    // O empurrão é no sentido da TELA, não nos eixos do mundo.
+    //
+    // Era isto que deixava o abajur invertido: o código somava dx no eixo X
+    // do mundo, mas a câmera gira em volta da mesa — de metade dos assentos o
+    // "+X do mundo" aparece à esquerda, e a lâmpada ia para o lado contrário
+    // do arraste. Agora o arraste é projetado na direção para onde a câmera
+    // olha, então puxar para a direita joga a lâmpada para a direita de quem
+    // está vendo, de qualquer assento.
+    const frente = camera.getWorldDirection(new THREE.Vector3());
+    frente.y = 0;
+    if (frente.lengthSq() < 1e-6) frente.set(0, 0, -1);
+    frente.normalize();
+    const direita = new THREE.Vector3(-frente.z, 0, frente.x);
+
+    const ganho = 0.004;
+    // arrastar para BAIXO traz a lâmpada para perto de quem olha
+    const mundoX = direita.x * dx * ganho - frente.x * dy * ganho;
+    const mundoZ = direita.z * dx * ganho - frente.z * dy * ganho;
+
+    // deslocar em +X é girar +Z; deslocar em +Z é girar -X
+    lampFis.z = trava(lampFis.z + mundoX, LAMP_MAX);
+    lampFis.x = trava(lampFis.x - mundoZ, LAMP_MAX);
+    mandarLampada(false);
     return;
   }
 
@@ -1169,9 +1454,21 @@ function onPointerMove(e) {
     orbit.lx = e.clientX;
     orbit.ly = e.clientY;
     orbit.andou += Math.abs(dx) + Math.abs(dy);
-    // sem trava: dá para dar a volta completa na mesa
-    orbit.yaw -= dx * 0.005;
-    orbit.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, orbit.pitch + dy * 0.004));
+
+    if (thirdPerson) {
+      // sem trava: dá para dar a volta completa na mesa
+      orbit.yaw -= dx * 0.005;
+      orbit.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, orbit.pitch + dy * 0.004));
+    } else {
+      // 1ª pessoa: a mesa fica firme e quem vira é a cabeça, com limite. O dy
+      // NÃO mexe na altura da câmera aqui — subir o olho do jogador sentado
+      // parecia que ele tinha levantado da cadeira.
+      // Os sentidos são os MESMOS da 3ª pessoa, senão trocar de câmera no meio
+      // da partida invertia o mouse: arrastar para a direita vira o olhar
+      // para a direita, arrastar para baixo abaixa o olhar para a mesa.
+      olhar.yaw = trava(olhar.yaw - dx * 0.005, OLHAR_MAX);
+      olhar.pitch = trava(olhar.pitch - dy * 0.004, OLHAR_MAX_Y);
+    }
   }
 }
 
@@ -1189,7 +1486,7 @@ function onPointerDown(e) {
     return;
   }
 
-  if (!thirdPerson) return; // em 1ª pessoa não se gira
+  // Vale nas duas câmeras: em 3ª gira a mesa, em 1ª vira a cabeça.
   orbit.dragging = true;
   orbit.andou = 0;
   orbit.lx = e.clientX;
@@ -1205,6 +1502,8 @@ function onPointerUp() {
     lampFis.vx = 0;
     const forca = Math.min(1, Math.abs(lampFis.z) / LAMP_MAX);
     lampKick.t = performance.now() + 1200 + forca * 2400;
+    // o pacote que fecha o gesto: daqui em diante é a física de cada cena
+    mandarLampada(true);
   }
   orbit.dragging = false;
   renderer.domElement.style.cursor = "";
@@ -1222,6 +1521,8 @@ function onDblClick() {
   orbit.yaw = 0;
   orbit.pitch = 0;
   orbit.zoom = 1;
+  olhar.yaw = 0;
+  olhar.pitch = 0;
 }
 
 function pick() {
@@ -1270,6 +1571,8 @@ export function init(el, opts = {}) {
   container = el;
   disposed = false;
   onPickTarget = opts.onPickTarget || null;
+  onLamp = opts.onLamp || null;
+  onLook = opts.onLook || null;
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -1403,7 +1706,20 @@ function posicionaCamera() {
     (alt + orbit.pitch * 1.4) * (0.55 + orbit.zoom * 0.45),
     Math.cos(ang) * raio,
   );
-  camera.lookAt(0, olha, 0);
+
+  // Em 1ª pessoa o assento fica no lugar e quem gira é a mira: o ponto para
+  // onde olho roda em volta da câmera, dentro do limite do pescoço. Em 3ª a
+  // mira é sempre o centro — lá é a mesa que gira.
+  if (!thirdPerson && (olhar.yaw || olhar.pitch)) {
+    const mira = new THREE.Vector3(0, olha, 0).sub(camera.position);
+    mira.applyAxisAngle(EIXO_Y, olhar.yaw);
+    // cima e baixo giram em volta do eixo lateral, senão o horizonte tomba
+    const lado = new THREE.Vector3(-mira.z, 0, mira.x);
+    if (lado.lengthSq() > 1e-6) mira.applyAxisAngle(lado.normalize(), olhar.pitch);
+    camera.lookAt(camera.position.clone().add(mira));
+  } else {
+    camera.lookAt(0, olha, 0);
+  }
 }
 
 export function update(state, meId, opts = {}) {
@@ -1417,6 +1733,16 @@ export function update(state, meId, opts = {}) {
   }
   thirdPerson = !!opts.thirdPerson;
   targets = opts.targets && opts.targets.size ? opts.targets : null;
+  // cartas que o cliente ainda não deixa revelar
+  segredo = new Set(opts.segredo || []);
+
+  // Entrei agora numa sala onde a lâmpada já estava balançando: entra no
+  // balanço em vez de nascer com o abajur reto enquanto os outros o veem
+  // torto. Só na primeira vez — depois quem manda são os recados de "lamp".
+  if (!lampPronta && state?.lamp) {
+    lampPronta = true;
+    lampadaDeFora(state.lamp);
+  }
 
   // Antes de começar, o cliente manda quem está SENTADO em vez de quem está
   // em jogo: a mesa mostra a sala se formando, sem carta nem moeda.
@@ -1482,6 +1808,12 @@ export function update(state, meId, opts = {}) {
     const current = state.phase === "turn" && state.currentPlayerId === p.id;
     s.isCurrent = current;
 
+    // Para onde a cabeça dele aponta. A minha sai da câmera agora, sem
+    // esperar a volta do servidor; a dos outros vem do estado (e dos recados
+    // de "look", que chegam entre um estado e outro).
+    s.olharAlvo =
+      p.id === meId ? meuOlhar() : trava(Number(p.yaw) || 0, OLHAR_MAX);
+
     // As minhas etiquetas flutuantes ficam SEMPRE escondidas: usam
     // depthTest:false e a câmera é a mais perto delas, então viravam letras
     // gigantes cobrindo a tela (em 1ª pessoa coladas na lente, em 3ª logo à
@@ -1532,11 +1864,14 @@ export function update(state, meId, opts = {}) {
     s.chips.visible = !esconderMeuCorpo;
     s.ring.visible = !esconderMeuCorpo;
 
-    s.body.position.y = (s.alturaBase ?? 0) + (p.aliveCount <= 0 ? -0.25 : 0);
+    // O tombo e a cor cinza esperam a carta terminar de virar: o corpo
+    // caindo antes da revelação já contava o final.
+    const morto = p.aliveCount <= 0 && !assentoOculto(p.id);
+
+    s.body.position.y = (s.alturaBase ?? 0) + (morto ? -0.25 : 0);
 
     // Quem perdeu as duas cartas fica sem cor: dá para ver de longe quem já
     // saiu, sem ter de contar carta virada.
-    const morto = p.aliveCount <= 0;
     if (s.apagado !== morto) {
       s.apagado = morto;
       s.body.traverse((o) => {
@@ -1560,6 +1895,9 @@ export function update(state, meId, opts = {}) {
   if (mudouMesa) ajustarAssentos();
 
   posicionaCamera();
+  // para onde eu estou olhando vai para a sala: é o que faz a cabeça do meu
+  // boneco virar na tela dos outros
+  mandarOlhar();
 
   if (deckMesh) deckMesh.visible = (state?.deckCount ?? 0) > 0;
 }
@@ -1685,7 +2023,9 @@ function animate() {
     const dt = Math.min(0.05, (nowMs - (lampFis.t0 || nowMs)) / 1000);
     lampFis.t0 = nowMs;
 
-    if (!lampDrag.ativo) {
+    // a física só roda quando ninguém está com a mão no abajur — nem aqui,
+    // nem na tela de quem está do outro lado
+    if (!lampDrag.ativo && nowMs >= lampSeguradaAte) {
       const fio = Math.max(0.2, aj("lampadaFio", 1.5));
       const w2 = 9.81 / fio;
       const freio = Math.exp(-aj("lampadaAmortece", 0.3) * dt);
@@ -1702,6 +2042,31 @@ function animate() {
 
     lampPivot.rotation.z = lampFis.z;
     lampPivot.rotation.x = lampFis.x;
+
+    // A POÇA DE LUZ acompanha o abajur.
+    //
+    // Antes o alvo do foco era um ponto fixo 4 m abaixo do abajur, filho da
+    // própria lâmpada. Na conta, inclinar o pendente 0,3 rad movia a poça uns
+    // 30 cm num cone larguíssimo e bem suave: na mesa não dava para perceber
+    // nada, e a sensação era de lâmpada balançando com a luz pregada no lugar.
+    // Agora o alvo é calculado no TAMPO, onde a luz de fato bate, e o alcance
+    // do passeio é um número da bancada.
+    const ondeBate = aj("luzPasseio", 3.2);
+    const alvoX = Math.sin(lampFis.z) * ondeBate;
+    const alvoZ = -Math.sin(lampFis.x) * ondeBate;
+    if (lampLight) {
+      // o alvo é filho da cena, não da lâmpada: assim ele fica onde a luz
+      // aponta de verdade em vez de girar junto e nunca sair do lugar
+      lampLight.target.position.set(alvoX, tampo(), alvoZ);
+      lampLight.target.updateMatrixWorld();
+    }
+    // O rebote é a luz que o feltro devolve nos rostos e nas paredes: ele
+    // mora onde a poça está, senão a sala continuava iluminada por igual e só
+    // o chão mudava.
+    if (bounceLight) {
+      bounceLight.position.x = alvoX * 0.55;
+      bounceLight.position.z = alvoZ * 0.55;
+    }
 
     // Mau contato: de tempos em tempos a luz pisca algumas vezes seguidas.
     let falha = 1;
@@ -1755,6 +2120,9 @@ function animate() {
     }
   }
 
+  // cartas virando na mesa
+  if (virando.size) passoDasViradas(1 / 60);
+
   // moedas e cartas em trânsito
   for (let i = flying.length - 1; i >= 0; i--) {
     const f = flying[i];
@@ -1772,6 +2140,16 @@ function animate() {
 
   for (const [, s] of seats) {
     s.body.rotation.z = Math.sin(t * 0.8 + s.group.position.x) * 0.012;
+
+    // suspense: as cartas do jogador tremem enquanto a mesa espera a virada
+    if (s.tremeAte) {
+      if (performance.now() < s.tremeAte) {
+        s.cartas.rotation.z = Math.sin(t * 34) * 0.05;
+      } else {
+        s.tremeAte = 0;
+        s.cartas.rotation.z = 0;
+      }
+    }
 
     // Na vez do jogador a ROUPA acende e pulsa na cor dele. O cilindro de
     // luz que havia antes em volta do corpo ficava feio e sujava a cena.
@@ -1901,10 +2279,19 @@ function animate() {
       mouth.scale.y += (alvo - mouth.scale.y) * 0.3;
       mouth.scale.x += ((rindo ? 1.5 : 1) - mouth.scale.x) * 0.3;
     }
-    const head = s.body.userData.head;
-    if (head) {
-      const alvo = rindo ? -0.3 - Math.abs(Math.sin(nowMs * 0.019)) * 0.18 : 0;
-      head.rotation.x += (alvo - head.rotation.x) * 0.25;
+
+    // A cabeça no pescoço: vira para os lados (para onde a pessoa olha) e
+    // joga para trás quando ri. Antes a risada girava só a esfera do crânio e
+    // o rosto ficava parado — agora rosto, cabelo e chapéu vão junto.
+    const cabeca = s.body.userData.cabeca;
+    if (cabeca) {
+      // A MINHA cabeça sai da câmera a cada quadro, não do estado: esperar o
+      // próximo pacote do servidor deixava o meu boneco olhando para o lado
+      // errado enquanto eu já tinha girado a mesa.
+      const alvoY = s.id === myId ? meuOlhar() : s.olharAlvo || 0;
+      cabeca.rotation.y += (alvoY - cabeca.rotation.y) * 0.16;
+      const alvoX = rindo ? -0.3 - Math.abs(Math.sin(nowMs * 0.019)) * 0.18 : 0;
+      cabeca.rotation.x += (alvoX - cabeca.rotation.x) * 0.25;
     }
 
     // mentira: o nariz cresce e volta
@@ -1983,5 +2370,9 @@ export function dispose() {
   }
   seats.clear();
   flying.length = 0;
+  virando.clear();
+  // a cena morreu: a próxima precisa pegar a lâmpada da sala de novo
+  lampPronta = false;
+  lampSeguradaAte = 0;
   renderer = scene = camera = null;
 }

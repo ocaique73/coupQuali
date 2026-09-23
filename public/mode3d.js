@@ -93,6 +93,10 @@
       mod.init(HOST, {
         // clicar num personagem escolhe o alvo da ação (roubar, golpe...)
         onPickTarget: (pid) => window.COUP3D.pickTarget?.(pid),
+        // A lâmpada e o olhar são da SALA: a cena avisa, o client.js manda
+        // pelo socket e os outros aplicam na cena deles.
+        onLamp: (d) => window.COUP3D.enviarLampada?.(d),
+        onLook: (yaw) => window.COUP3D.enviarOlhar?.(yaw),
       });
       scene = mod;
       setMsg("");
@@ -173,6 +177,8 @@
   // ---- ganchos chamados pelo client.js ----
   window.COUP3D = {
     pickTarget: null, // o client.js preenche
+    enviarLampada: null, // idem — viram emits do socket
+    enviarOlhar: null,
 
     onState(state, myId, extra) {
       window.__coupState = state;
@@ -218,11 +224,57 @@
       }
     },
 
-    // moedas, cartas do embaixador, carta perdida
+    // moedas, cartas do embaixador, carta indo para o descarte
     onGameEvent(ev) {
       if (mode === "3d" && scene) {
         try {
           scene.gameEvent(ev);
+        } catch (e) {
+          console.error("[3D]", e);
+        }
+      }
+    },
+
+    // As duas metades do suspense. O client.js chama no ritmo da fila de
+    // animações, para que a mesa 3D vire a carta no MESMO instante em que o
+    // 2D vira — quem troca de modo no meio da partida vê a mesma cena.
+    onSuspense(pid, ms) {
+      if (mode === "3d" && scene) {
+        try {
+          scene.suspense(pid, ms);
+        } catch (e) {
+          console.error("[3D]", e);
+        }
+      }
+    },
+
+    onRevelar(pid, idx, role, tipo, ms) {
+      if (mode === "3d" && scene) {
+        try {
+          scene.revelar(pid, idx, role, tipo, ms);
+        } catch (e) {
+          console.error("[3D]", e);
+        }
+      }
+    },
+
+    // Chegou da sala: alguém empurrou a lâmpada ou virou a cabeça. Vale
+    // mesmo em 2D — quem está no 2D não tem cena para animar, mas se trocar
+    // para o 3D no meio, o estado já traz a lâmpada e as cabeças no lugar.
+    lampadaDeFora(d) {
+      if (mode === "3d" && scene) {
+        try {
+          scene.lampadaDeFora(d);
+        } catch (e) {
+          console.error("[3D]", e);
+        }
+      }
+    },
+
+    olharDeFora(pid, yaw) {
+      if (mode === "3d" && scene) {
+        try {
+          scene.olharDeFora(pid, yaw);
         } catch (e) {
           console.error("[3D]", e);
         }

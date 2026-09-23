@@ -191,7 +191,22 @@
       }
     };
 
-    rodape.append(zerar, copiar);
+    // O ritmo da virada é o único número que não dá para julgar parado:
+    // este botão roda a cena de revelação na mesa de mentira, com o valor
+    // que estiver no controle agora.
+    const virar = document.createElement("button");
+    virar.className = "btn small warn";
+    virar.textContent = "Ver uma revelação";
+    virar.title = "Roda a virada de carta com o ritmo atual";
+    let qual = 0;
+    virar.onclick = () => {
+      const papeis = ["Duke", "Contessa", "Captain", "Assassin", "Ambassador"];
+      const alvo = players[1 + (qual % (players.length - 1))];
+      window.__coupTesteRevelacao?.(alvo.id, 1, papeis[qual % papeis.length]);
+      qual++;
+    };
+
+    rodape.append(zerar, virar, copiar);
     box.appendChild(rodape);
 
     document.body.appendChild(box);

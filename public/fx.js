@@ -11,6 +11,15 @@
   // escrito nas chamadas e no CSS. Mexa só aqui para acelerar/desacelerar tudo.
   const SPEED = 1.3;
 
+  // Ritmo SÓ da revelação de carta. Fica separado do SPEED porque é o tempo
+  // mais delicado do jogo: rápido demais ninguém vê a carta virar, lento
+  // demais vira câmera lenta e mata a partida. A bancada (/teste) mexe nele
+  // ao vivo, em "Revelação de carta".
+  function ritmo() {
+    const v = Number(window.AJUSTES3D?.get?.("revelaRitmo"));
+    return Number.isFinite(v) && v > 0 ? v : 1;
+  }
+
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   let layer = null;
@@ -68,6 +77,7 @@
 
   const FX = {
     rect,
+    reduced,
 
     // ---------- fila sequencial ----------
     _q: [],
@@ -213,44 +223,127 @@
       );
     },
 
-    // carta virando para cima em cima do assento
-    revealCard({ at, role, dur = 1000 }) {
+    /* ---------- revelação de carta: o suspense do jogo ---------- */
+    //
+    // Três tempos, sempre nesta ordem: a carta sobe e hesita (ninguém sabe
+    // ainda), gira de verdade, e fica parada de frente tempo suficiente para
+    // a mesa inteira ler. Só DEPOIS disso o jogo diz o que aconteceu.
+    //
+    // O tempo de cada etapa sai daqui para o client.js sequenciar a fila com
+    // os mesmos números — animação e espera precisam bater.
+    get REVELA() {
+      const r = ritmo();
+      // com movimento reduzido não há o que assistir: encurta tudo
+      const corte = reduced ? 0.35 : 1;
+      // Contas em cima do tempo REAL na tela (tudo aqui ainda é multiplicado
+      // pelo SPEED): ~1,0s de suspense, ~2,0s de virada — dos quais ~0,65s de
+      // giro e ~0,7s parada de frente — e ~0,9s de veredito. Perto de 4s no
+      // total, que é o limite antes de a partida começar a arrastar.
+      return {
+        suspense: Math.round(750 * r * corte),
+        virada: Math.round(1500 * r * corte),
+        leitura: Math.round(700 * r * corte),
+      };
+    },
+
+    // Carta de costas tremendo na mesa: o "vai ou não vai".
+    //
+    // Existe para que blefe e verdade levem EXATAMENTE o mesmo tempo até a
+    // virada. Sem isso o próprio relógio entregava a resposta: quem tinha a
+    // carta demorava mais do que quem estava blefando.
+    suspenseCard({ at, dur = 750 }) {
       if (!at) return Promise.resolve();
       const c = centerOf(at);
       const el = spawn(
-        `${UI.roleArt(role)}<div class="fxRevealTag">REVELADA</div>`,
-        `fxCard fxReveal ${UI.roleClass(role)}`,
+        `<div class="fxCardMark">?</div>`,
+        "fxCard back fxSuspense",
         { left: `${c.x}px`, top: `${c.y}px` },
       );
 
       return run(
         el,
         [
-          {
-            transform: "translate(-50%,-50%) rotateY(180deg) scale(1)",
-            opacity: 0.2,
-          },
-          {
-            transform: "translate(-50%,-50%) rotateY(90deg) scale(1.35)",
-            opacity: 1,
-            offset: 0.25,
-          },
-          {
-            transform: "translate(-50%,-70%) rotateY(0deg) scale(1.9)",
-            opacity: 1,
-            offset: 0.55,
-          },
-          {
-            transform: "translate(-50%,-70%) rotateY(0deg) scale(1.9)",
-            opacity: 1,
-            offset: 0.8,
-          },
-          {
-            transform: "translate(-50%,-50%) rotateY(0deg) scale(1)",
-            opacity: 0,
-          },
+          { transform: "translate(-50%,-50%) scale(.75)", opacity: 0 },
+          { transform: "translate(-50%,-64%) scale(1.14) rotate(-4deg)", opacity: 1, offset: 0.2 },
+          { transform: "translate(-50%,-66%) scale(1.16) rotate(4deg)", opacity: 1, offset: 0.42 },
+          { transform: "translate(-50%,-64%) scale(1.14) rotate(-3deg)", opacity: 1, offset: 0.64 },
+          { transform: "translate(-50%,-66%) scale(1.16) rotate(2deg)", opacity: 1, offset: 0.86 },
+          { transform: "translate(-50%,-62%) scale(1.1) rotate(0deg)", opacity: 0 },
         ],
-        { duration: dur },
+        { duration: dur, easing: "ease-in-out" },
+      );
+    },
+
+    // A virada. Frente e verso são dois elementos de verdade (backface
+    // escondida): a carta gira mostrando o dorso até a metade e a face
+    // depois — não é a arte aparecendo do nada como era antes.
+    revealFlip({ at, role, tag = "REVELADA", cls = "", dur = 1500 }) {
+      if (!at) return Promise.resolve();
+      const c = centerOf(at);
+
+      const el = spawn(
+        `<div class="fxFlipInner">
+           <div class="fxFace fxBack"><div class="fxCardMark">C</div></div>
+           <div class="fxFace fxFront ${UI.roleClass(role)}">
+             ${UI.roleArt(role)}
+             <div class="fxFlipName">${UI.escape(UI.rolePt(role))}</div>
+           </div>
+         </div>
+         <div class="fxRevealTag ${cls}">${UI.escape(tag)}</div>`,
+        `fxFlip ${cls}`,
+        { left: `${c.x}px`, top: `${c.y}px` },
+      );
+
+      // A etiqueta ("PERDIDA", "TINHA MESMO") entra SÓ depois da virada: com
+      // ela visível desde o começo, a palavra contava o final enquanto a
+      // carta ainda estava de costas.
+      const selo = el.querySelector(".fxRevealTag");
+      if (selo && !reduced && typeof selo.animate === "function") {
+        selo.animate(
+          [
+            { opacity: 0, transform: "translateX(-50%) scale(.7)", offset: 0 },
+            { opacity: 0, transform: "translateX(-50%) scale(.7)", offset: 0.55 },
+            { opacity: 1, transform: "translateX(-50%) scale(1.15)", offset: 0.64 },
+            { opacity: 1, transform: "translateX(-50%) scale(1)", offset: 0.72 },
+            { opacity: 1, transform: "translateX(-50%) scale(1)", offset: 1 },
+          ],
+          { duration: dur * SPEED, easing: "cubic-bezier(.2,1.3,.4,1)", fill: "both" },
+        );
+      }
+
+      // o giro vive no elemento de dentro; o de fora só sobe, cresce e some
+      const inner = el.querySelector(".fxFlipInner");
+      if (inner && !reduced && typeof inner.animate === "function") {
+        inner.animate(
+          [
+            { transform: "rotateY(0deg)", offset: 0 },
+            { transform: "rotateY(0deg)", offset: 0.14 },
+            // recua um pouco antes de virar: dá o impulso e avisa que vem
+            { transform: "rotateY(-16deg)", offset: 0.22 },
+            { transform: "rotateY(180deg)", offset: 0.55 },
+            // e fica PARADA de frente o resto do tempo: é aqui que a mesa lê
+            { transform: "rotateY(180deg)", offset: 1 },
+          ],
+          {
+            duration: dur * SPEED,
+            easing: "cubic-bezier(.5,.02,.3,1)",
+            fill: "both",
+          },
+        );
+      }
+
+      return run(
+        el,
+        [
+          { transform: "translate(-50%,-50%) scale(.85)", opacity: 0, offset: 0 },
+          { transform: "translate(-50%,-66%) scale(1.2)", opacity: 1, offset: 0.1 },
+          { transform: "translate(-50%,-68%) scale(1.2)", opacity: 1, offset: 0.22 },
+          { transform: "translate(-50%,-72%) scale(1.55)", opacity: 1, offset: 0.55 },
+          { transform: "translate(-50%,-74%) scale(1.75)", opacity: 1, offset: 0.64 },
+          { transform: "translate(-50%,-74%) scale(1.75)", opacity: 1, offset: 0.93 },
+          { transform: "translate(-50%,-56%) scale(1.15)", opacity: 0, offset: 1 },
+        ],
+        { duration: dur, easing: "cubic-bezier(.3,.8,.35,1)" },
       );
     },
 

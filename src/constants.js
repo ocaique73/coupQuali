@@ -37,6 +37,18 @@ const HEADS = ["hair", "bald", "cap", "cowboy"];
 const THEMES = ["politica", "qualitas"];
 const DEFAULT_THEME = "politica";
 
+// A lâmpada e o olhar são da SALA e não de quem mexeu, então trafegam a
+// todo momento. Estes limites são o que impede um mouse nervoso (ou um
+// cliente adulterado) de inundar a sala.
+const LAMP_MIN_MS = 45;
+const LOOK_MIN_MS = 60;
+// até onde a cabeça vira para os lados, em radianos (~52°). A mesa gira
+// infinito no 3D; o pescoço não.
+const LOOK_MAX = 0.92;
+// o mesmo teto do balanço que a cena usa, repetido aqui porque o servidor
+// não confia no número que o navegador manda
+const LAMP_MAX = 0.55;
+
 // chat
 const CHAT_MAX = 150;
 const CHAT_MIN_MS = 1200; // anti-spam
@@ -60,4 +72,5 @@ module.exports = {
   THEMES, DEFAULT_THEME,
   SHIRTS, BODIES, SKINS, PROPS, HEADS,
   CHAT_MAX, CHAT_MIN_MS, EMOTE_MIN_MS, EMOTES,
+  LAMP_MIN_MS, LOOK_MIN_MS, LOOK_MAX, LAMP_MAX,
 };

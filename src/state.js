@@ -61,6 +61,8 @@ function roomPublicState(room, viewerId) {
     inGame: !!p.inGame,
     connected: !!p.connected,
     isHost: p.id === room.hostId,
+    // a mesa 3D já existe no lobby: as cabeças também viram lá
+    yaw: p.yaw || 0,
   }));
 
   // fila = quem chegou com a sala cheia ou com a partida rolando
@@ -98,6 +100,8 @@ function roomPublicState(room, viewerId) {
       coins: p.coins,
       connected: p.connected,
       aliveCount: aliveCount(p),
+      // para onde a cabeça dele está virada (o 3D usa; o 2D ignora)
+      yaw: p.yaw || 0,
       hand:
         p.id === viewerId
           ? p.hand.map((c) => ({
@@ -144,6 +148,11 @@ function roomPublicState(room, viewerId) {
     paused: room.paused
       ? { byNick: room.paused.byNick, untilAt: room.paused.untilAt }
       : null,
+
+    // Onde a lâmpada da sala está agora. Quem acabou de entrar precisa disto:
+    // sem ele, a cena nasce com o abajur reto enquanto o resto da mesa o vê
+    // balançando de lado.
+    lamp: room.lamp || null,
 
     themes: THEMES,
     palette: PLAYER_COLORS,

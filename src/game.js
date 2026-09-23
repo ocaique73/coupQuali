@@ -188,17 +188,20 @@ function killSpecificInfluence(room, player, idx, reason) {
   if (!c || !c.alive) return false;
   c.alive = false;
   c.revealed = true;
-  room.discard.push({
-    role: c.role,
-    ownerNick: player.nick,
-    reason,
-    ts: now(),
-  });
   pushEvent(room, "card_lost", {
     playerId: player.id,
     nick: player.nick,
     idx,
     role: c.role,
+  });
+  // Entra no descarte DEPOIS do evento, e carregando o seq dele: assim o
+  // painel de descarte só mostra a carta quando a virada na mesa terminar.
+  room.discard.push({
+    role: c.role,
+    ownerNick: player.nick,
+    reason,
+    seq: room.eventSeq,
+    ts: now(),
   });
   addLog(room, `${player.nick} perdeu influência (${c.role}).`);
 

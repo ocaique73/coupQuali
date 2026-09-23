@@ -1419,6 +1419,9 @@ h2 {
 .fxRevealTag {
   position: absolute;
   bottom: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
   font-size: 8px;
   font-weight: 900;
   letter-spacing: 1px;
@@ -1426,6 +1429,123 @@ h2 {
   color: #fff;
   padding: 2px 8px;
   border-radius: 999px;
+}
+.fxRevealTag.ok {
+  background: var(--green, #2dd36f);
+}
+.fxRevealTag.warn {
+  background: var(--yellow, #ffd400);
+  color: #201800;
+}
+
+/* ---------- a carta virando na mesa ----------
+   Frente e verso são dois elementos de verdade, com a face de trás
+   escondida: a carta gira mostrando o dorso até a metade e só então a arte.
+   Antes a arte simplesmente aparecia, e não havia virada nenhuma para ver. */
+.fxSuspense {
+  /* mesmo tamanho da carta que vai virar: se encolhesse aqui e crescesse
+     depois, a troca entre as duas aparecia como um salto */
+  width: 86px;
+  height: 118px;
+  border-radius: 11px;
+  z-index: 3;
+  filter: drop-shadow(0 12px 26px rgba(0, 0, 0, 0.75));
+}
+.fxSuspense .fxCardMark {
+  font-size: 30px;
+  color: #4a628a;
+}
+
+.fxFlip {
+  width: 86px;
+  height: 118px;
+  z-index: 4;
+  perspective: 900px;
+}
+.fxFlipInner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.fxFace {
+  position: absolute;
+  inset: 0;
+  border-radius: 11px;
+  overflow: hidden;
+  background: #05080d;
+  border: 3px solid #2a3a52;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.7);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.fxFace.fxBack {
+  background: linear-gradient(140deg, #16213a, #070b12);
+}
+.fxFace.fxFront {
+  transform: rotateY(180deg);
+}
+.fxFlipName {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 4px 2px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.92) 55%);
+}
+/* o brilho na cor de quem está sendo revelado: verde quando a carta prova
+   a alegação, vermelho quando é a influência que caiu */
+.fxFlip.ok .fxFace.fxFront {
+  border-color: var(--green, #2dd36f);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.7),
+    0 0 34px rgba(45, 211, 111, 0.55);
+}
+.fxFlip.bad .fxFace.fxFront {
+  border-color: var(--red, #ff3b3b);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.7),
+    0 0 34px rgba(255, 59, 59, 0.55);
+}
+
+/* assento de quem vai revelar: prende a atenção durante o suspense.
+   Fica no .seat (e não no .seatCard) porque é o FX.ping que dita a duração,
+   e ele mexe no elemento em que a classe entra. */
+.seat.revealPulse {
+  animation: revealPulse 1s ease-in-out;
+}
+@keyframes revealPulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 rgba(255, 212, 0, 0);
+  }
+  35% {
+    transform: translate(-50%, -50%) scale(1.045);
+    box-shadow: 0 0 40px rgba(255, 212, 0, 0.5);
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(1.02);
+    box-shadow: 0 0 26px rgba(255, 212, 0, 0.35);
+  }
+}
+
+/* a mesa "prende a respiração": enquanto a carta não virou, o painel de
+   descarte e o log ficam levemente apagados em vez de já contar o final */
+.segredo #discard,
+.segredo #log {
+  opacity: 0.55;
 }
 
 .fxCoin {
