@@ -257,6 +257,12 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
 
 ## T. Desenho dos personagens e ajustes permanentes
 
+> **T1–T6 foram desfeitos.** O desenho novo ficou feio na tela e o boneco
+> voltou ao de antes (rodada R). O que a rodada trouxe de CONFIGURAÇÃO ficou:
+> altura separada por item de cabeça, 1ª pessoa só com os braços e o ajuste
+> permanente. Os itens riscados abaixo estão aqui como registro do que foi
+> tentado — o código está no commit `d028341` se algum pedaço for útil um dia.
+
 - [x] T1. **Tronco torneado** em vez de cano. Era um cilindro reto, sem peito e
       com degrau seco na emenda dos ombros. Virou um perfil girado: engrossa no
       peito e fecha em curva na direção do pescoço, que é o "ombro fundido" da
@@ -288,7 +294,11 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
       grava três bytes invisíveis na frente e o `JSON.parse` engasgava: o
       arquivo parecia perfeito na tela e a cena subia no padrão sem explicar
 
-## U. Os dois estilos de personagem
+## U. Os dois estilos de personagem — DESFEITO
+
+> Revertido junto com T1–T6: os dois desenhos saíram e o visual voltou a ser
+> um só. A opção "Estilo" sumiu do editor de perfil e do servidor. Registro do
+> que foi feito, no commit `2e1ef0c`:
 
 - [x] U1. A referência trazia **dois conceitos**, e a rodada anterior fundiu os
       dois num só. Agora são dois de verdade, e o jogador **escolhe**:
@@ -307,6 +317,21 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
       apontar e fazer o L continuam funcionando nos dois estilos
 - [x] U4. As **barras da bancada valem nos dois**: acertar o braço num acerta no
       outro, porque o que o estilo troca é a geometria, não as medidas
+
+## V. Volta do desenho
+
+- [x] V1. O boneco **voltou ao desenho da rodada R**. Tronco cilíndrico, bola
+      de ombro simples, cabelo de calota com franja, sobrancelha fina, queixo
+      redondo e mão de cápsulas — conferido por diff contra o commit
+      `847b2b2`: `buildHand` voltou idêntico, e o corpo só difere no que era
+      para ficar
+- [x] V2. **Ficou tudo que é configuração**, que é o que o pedido separava:
+      altura por item de cabeça (boné, chapéu, cabelo), as 22 barras da
+      bancada, o limite de olhar e de zoom da 1ª pessoa, 1ª pessoa só com os
+      braços, ajustes valendo para o jogo todo e o *Fixar permanente*
+- [x] V3. As **correções** da rodada R continuam de pé: a junta do cotovelo
+      fecha, a bola do ombro é 0.09 e as abas do boné e do chapéu seguem acima
+      da sobrancelha
 
 ### O que ainda não foi visto rodando
 
