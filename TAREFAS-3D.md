@@ -373,6 +373,29 @@ acompanham a cabeça.
       só, não sobra nada para varrer o lado, e ela fica para dentro da copa,
       escondendo a emenda. Avanço e largura viraram barras
 
+## X. Fixar sem token
+
+- [x] X1. BUG: **"Fixar" dava "o servidor não respondeu" no /teste.** A bancada
+      derruba o socket do jogo de propósito — senão a resposta do servidor
+      apagaria a mesa de mentira dela — e os ajustes caíram nesse buraco quando
+      passaram a morar no servidor. As barras de /teste **não mandavam nem
+      recebiam nada**, e o botão esperava uma resposta que nunca vinha. Agora a
+      bancada abre um socket próprio, que escuta só `ajustes`
+- [x] X2. O caminho do **token do GitHub saiu**. Commitar sozinho era elegante
+      mas exigia criar e guardar um token — trabalho e risco demais para uma
+      tela de autor usada de vez em quando
+- [x] X3. O botão virou **Baixar para fixar** e o arquivo sai com data e hora
+      no nome (`coup-visual-2026-09-23-1141.json`). O nome com data existe para
+      o mais novo ser óbvio, em vez de `ajustes (1).json`, `ajustes (2).json`
+      empilhados sem dar para saber qual é o bom
+- [x] X4. **`tools/fixar-ajustes.js`** carimba os números no `PADRAO` do
+      `public/ajustes3d.js`. `--ultimo` pega o mais novo dos Downloads,
+      `--ver` só mostra o que mudaria. Ele reescreve **só a linha** de cada
+      número dentro do bloco PADRAO: um replace no arquivo inteiro pegaria a
+      mesma chave na lista de controles logo abaixo
+- [x] X5. Os primeiros ajustes do Caique já foram carimbados: tronco, quadril,
+      largura dos ombros e altura do boné e do chapéu
+
 ### O que ainda não foi visto rodando
 
 O servidor e a lógica foram testados: dois clientes de verdade numa sala, as

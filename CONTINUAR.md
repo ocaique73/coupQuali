@@ -40,34 +40,25 @@ ele, cada navegador tinha a sua versão do jogo.
 Ajustar uma barra vale na hora para todo mundo, mas fica só na memória do
 servidor: morre num deploy e quando o Render hiberna.
 
-**Para fixar de verdade existe o botão "Fixar permanente"**, nas duas bancadas.
-O único lugar que sobrevive a um redeploy é o repositório — é dele que o deploy
-nasce — então o botão grava `ajustes.json` lá. Dois caminhos:
+**Para fixar de verdade**, o caminho tem dois passos e nenhum token:
 
-- **com token:** commita direto pela API do GitHub. Precisa de duas variáveis
-  de ambiente no painel do Render:
+1. na bancada, **Baixar para fixar** — sai um `coup-visual-<data>-<hora>.json`
+   na pasta de Downloads (a data no nome existe para o mais novo ser sempre
+   óbvio, em vez de `ajustes (1).json`, `ajustes (2).json`);
+2. `node tools/fixar-ajustes.js --ultimo` — pega o mais novo e carimba os
+   números no `PADRAO` do `public/ajustes3d.js`. Com `--ver` ele só mostra o
+   que mudaria. Depois é commitar.
 
-  | variável | valor |
-  | --- | --- |
-  | `GITHUB_TOKEN` | token com permissão de escrita em *Contents* |
-  | `GITHUB_REPO` | `ocaique73/coupQuali` |
-  | `GITHUB_BRANCH` | opcional, `main` por padrão |
+O script zera o `ajustes.json` ao carimbar: esse arquivo guarda a DIFERENÇA em
+relação ao `PADRAO`, e se o padrão agora é o próprio valor, não há diferença.
 
-  O token fica só dentro das chamadas do `src/ajustes.js`: não vai para log
-  nem para o navegador.
+> Houve um caminho que commitava sozinho pela API do GitHub. Saiu: exigia criar
+> e guardar um token, o que é trabalho e risco demais para uma tela de autor que
+> se usa de vez em quando.
 
-- **sem token:** o botão baixa o `ajustes.json` para commitar na mão (é o que
-  acontece hoje, porque as variáveis não estão configuradas). Mesmo resultado,
-  um passo a mais: jogar o arquivo na raiz do projeto e commitar.
-
-Como criar o token, se quiser o botão fazendo tudo sozinho: GitHub → *Settings*
-→ *Developer settings* → *Personal access tokens* → *Fine-grained tokens*, com
-acesso só a este repositório e permissão **Contents: Read and write**. Depois é
-colar no painel do Render, em *Environment*.
-
-O `ajustes.json` **não** está no `.gitignore` de propósito — se for ignorado,
-"fixar" para de funcionar. O *Copiar para o código* continua existindo para
-quando um número merecer virar `PADRAO` no `public/ajustes3d.js`.
+O `ajustes.json` **não** está no `.gitignore` de propósito: commitado, ele é o
+que o servidor carrega na subida, então vale mesmo antes de alguém carimbar no
+`PADRAO`.
 
 E **a bancada não tem dono**: quem abrir `/teste` muda a cena de todo mundo.
 

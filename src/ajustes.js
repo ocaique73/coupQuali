@@ -83,102 +83,39 @@ function aplicar(valores, reset) {
 }
 
 /* ------------------------------------------------------------------ */
-/* fixar de verdade: gravar no repositório                             */
+/* fixar: entregar os números para virarem código                      */
 /*                                                                     */
 /* O disco do Render é efêmero — some no deploy e quando o serviço      */
-/* hiberna. O único lugar que sobrevive a um redeploy é o REPOSITÓRIO,  */
-/* porque é dele que o deploy nasce. Então "fixar" é literalmente fazer */
-/* um commit do ajustes.json, e o deploy seguinte já sobe com ele.      */
+/* hiberna. O único lugar que sobrevive é o CÓDIGO, e quem escreve      */
+/* código é uma pessoa, não o servidor.                                 */
 /*                                                                     */
-/* Precisa de duas variáveis de ambiente no painel do Render:           */
-/*   GITHUB_TOKEN  — token com permissão de escrita em conteúdo         */
-/*   GITHUB_REPO   — "usuario/repositorio"                              */
-/* Sem elas o botão não quebra: devolve o arquivo para baixar e commitar*/
-/* na mão, que dá no mesmo, só com um passo a mais.                     */
+/* Então "fixar" aqui é só entregar o arquivo: a bancada baixa, e o     */
+/* tools/fixar-ajustes.js carimba os valores no PADRAO do              */
+/* public/ajustes3d.js. Havia um caminho que commitava sozinho pela API */
+/* do GitHub, mas exigia criar e guardar um token — trabalho e risco    */
+/* demais para uma tela de autor que se usa de vez em quando.           */
 /* ------------------------------------------------------------------ */
 
-const API = "https://api.github.com";
-
-function config() {
-  const token = process.env.GITHUB_TOKEN;
-  const repo = process.env.GITHUB_REPO;
-  const branch = process.env.GITHUB_BRANCH || "main";
-  return token && repo ? { token, repo, branch } : null;
+// O nome carrega a data e a hora: cada download é um arquivo novo, em vez de
+// "ajustes (1).json", "ajustes (2).json" empilhados na pasta sem dar para
+// saber qual é o último.
+function nomeDoArquivo() {
+  const d = new Date();
+  const z = (n) => String(n).padStart(2, "0");
+  return (
+    `coup-visual-${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}` +
+    `-${z(d.getHours())}${z(d.getMinutes())}.json`
+  );
 }
 
-function cabecalhos(token) {
+function fixar() {
   return {
-    // O token NUNCA é registrado em log nem devolvido ao navegador: ele só
-    // existe dentro destas chamadas.
-    Authorization: `Bearer ${token}`,
-    Accept: "application/vnd.github+json",
-    "User-Agent": "coup-online",
-    "X-GitHub-Api-Version": "2022-11-28",
+    ok: false,
+    motivo: "baixar",
+    arquivo: nomeDoArquivo(),
+    conteudo: JSON.stringify(atual, null, 2) + String.fromCharCode(10),
+    texto: "",
   };
 }
 
-async function fixar() {
-  const cfg = config();
-  const conteudo = JSON.stringify(atual, null, 2) + String.fromCharCode(10);
-
-  if (!cfg) {
-    return {
-      ok: false,
-      motivo: "sem_token",
-      conteudo,
-      texto:
-        "Sem GITHUB_TOKEN/GITHUB_REPO no servidor: baixe o ajustes.json e " +
-        "faça o commit dele na raiz do projeto.",
-    };
-  }
-  if (typeof fetch !== "function") {
-    return { ok: false, motivo: "sem_fetch", conteudo, texto: "Node sem fetch." };
-  }
-
-  const url = `${API}/repos/${cfg.repo}/contents/ajustes.json`;
-
-  try {
-    // O GitHub exige o sha do arquivo que está lá para substituir. Se não
-    // existir ainda (404), é criação e vai sem sha.
-    let sha;
-    const atualNoRepo = await fetch(`${url}?ref=${encodeURIComponent(cfg.branch)}`, {
-      headers: cabecalhos(cfg.token),
-    });
-    if (atualNoRepo.status === 200) sha = (await atualNoRepo.json()).sha;
-    else if (atualNoRepo.status !== 404)
-      return { ok: false, motivo: "leitura", conteudo, texto: `GitHub respondeu ${atualNoRepo.status} ao ler o arquivo.` };
-
-    const r = await fetch(url, {
-      method: "PUT",
-      headers: { ...cabecalhos(cfg.token), "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: "Fixa os ajustes da cena pela bancada",
-        content: Buffer.from(conteudo, "utf8").toString("base64"),
-        branch: cfg.branch,
-        ...(sha ? { sha } : {}),
-      }),
-    });
-
-    if (!r.ok) {
-      const corpo = await r.text();
-      // a mensagem do GitHub ajuda (token sem permissão, repo errado), mas
-      // vai cortada: não é lugar de despejar resposta inteira na tela
-      return {
-        ok: false,
-        motivo: "escrita",
-        conteudo,
-        texto: `GitHub recusou (${r.status}): ${corpo.slice(0, 180)}`,
-      };
-    }
-
-    return {
-      ok: true,
-      texto:
-        "Commitado no repositório. O próximo deploy já sobe com estes números.",
-    };
-  } catch (e) {
-    return { ok: false, motivo: "rede", conteudo, texto: `Falhou: ${e.message}` };
-  }
-}
-
-module.exports = { atuais: () => atual, aplicar, fixar, temToken: () => !!config() };
+module.exports = { atuais: () => atual, aplicar, fixar };

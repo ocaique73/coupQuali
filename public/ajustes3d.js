@@ -22,12 +22,12 @@
 
     // ---- corpo do boneco (a tela /personagem mexe nisto) ----
     ombroAltura: 1.43, // altura da junta do ombro; o tronco pendura daqui
-    ombroLargura: 0.29, // distância do ombro ao centro
+    ombroLargura: 0.34, // distância do ombro ao centro
     ombroTamanho: 0.09, // raio da bola do ombro
-    troncoOmbro: 0.26, // raio do tronco em cima
-    troncoCintura: 0.24, // raio do tronco na cintura
+    troncoOmbro: 0.285, // raio do tronco em cima
+    troncoCintura: 0.25, // raio do tronco na cintura
     troncoAltura: 0.52,
-    quadrilRaio: 0.27,
+    quadrilRaio: 0.31,
 
     // ---- braços ----
     // O ângulo é em radianos: 0 é o braço reto para baixo, negativo joga
@@ -50,8 +50,8 @@
     // acaba na testa. Negativo desce a linha e cobre mais testa; positivo
     // sobe e descobre. A peça acompanha o crânio, então nenhum valor a
     // descola da cabeça.
-    boneAltura: 0,
-    chapeuAltura: 0,
+    boneAltura: -0.008,
+    chapeuAltura: -0.012,
     cabeloAltura: 0,
     // tamanho da aba do boné: o quanto ela avança à frente da testa e a
     // meia-largura dela. A copa tem ~0.131 de meia-largura nessa altura.

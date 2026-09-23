@@ -276,45 +276,43 @@ function recarregarBarras() {
 /* ligações                                                            */
 /* ------------------------------------------------------------------ */
 
-// Botão "Fixar": o único jeito de um número sobreviver a um redeploy.
+// Botão "Baixar para fixar": entrega os números para virarem código.
 //
-// O disco do Render é efêmero; o repositório não. Com GITHUB_TOKEN no
-// servidor isto vira um commit do ajustes.json e o deploy seguinte já sobe
-// com ele. Sem token, o arquivo é baixado para commitar na mão — mesmo
-// resultado, um passo a mais.
+// O que se ajusta aqui vale na hora para todo mundo, mas mora na memória do
+// servidor — some no deploy e quando o Render hiberna. O único lugar
+// permanente é o código, e quem escreve código é uma pessoa. Então o botão
+// faz a parte dele: baixa um arquivo com data no nome, e de lá o
+// `node tools/fixar-ajustes.js --ultimo` carimba os valores no PADRAO.
 function montarFixar(A, onde, dizer) {
   const b = document.createElement("button");
   b.className = "btn small primary";
-  b.textContent = "Fixar permanente";
-  b.title = "Grava os números no repositório: sobrevive a deploy e hibernação";
+  b.textContent = "Baixar para fixar";
+  b.title = "Baixa os números para carimbar no código (tools/fixar-ajustes.js)";
   b.onclick = async () => {
     const antes = b.textContent;
     b.disabled = true;
-    b.textContent = "Fixando...";
+    b.textContent = "Gerando...";
     const r = await A.fixar();
     b.disabled = false;
     b.textContent = antes;
 
-    if (r.ok) return dizer(r.texto || "Fixado no repositório.", true);
+    if (!r.conteudo) return dizer(r.texto || "Não deu para gerar.", false);
 
-    // sem token: entrega o arquivo para a pessoa commitar
-    if (r.conteudo) {
-      try {
-        const url = URL.createObjectURL(
-          new Blob([r.conteudo], { type: "application/json" }),
-        );
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "ajustes.json";
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 4000);
-        return dizer(
-          "Baixei o ajustes.json — commite na raiz do projeto para fixar.",
-          true,
-        );
-      } catch {}
+    try {
+      const url = URL.createObjectURL(
+        new Blob([r.conteudo], { type: "application/json" }),
+      );
+      const a = document.createElement("a");
+      a.href = url;
+      // o nome vem com data e hora do servidor: cada download é um arquivo
+      // novo, em vez de empilhar "(1)", "(2)" sem dar para saber qual é o bom
+      a.download = r.arquivo || "coup-visual.json";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      dizer(`Baixei ${a.download} — rode: node tools/fixar-ajustes.js --ultimo`, true);
+    } catch (e) {
+      dizer("O navegador bloqueou o download: " + e.message, false);
     }
-    dizer(r.texto || "Não deu para fixar.", false);
   };
   onde.appendChild(b);
   return b;
