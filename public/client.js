@@ -295,6 +295,15 @@ socket.on("me", ({ pid }) => {
   if (pid) myId = pid;
 });
 
+/* ---- números da cena: do servidor, valendo para o jogo todo ---- */
+// A bancada salva por aqui, e o que chega de volta vale para todas as salas.
+// Antes isso morava no localStorage e cada navegador tinha a sua versão do
+// jogo — dois jogadores na mesma mesa viam mesas diferentes.
+window.AJUSTES3D?.aoSalvar((d) => socket.emit("ajustes", d));
+socket.on("ajustes", (o) => {
+  if (window.AJUSTES3D?.aplicarDeFora(o)) push3D();
+});
+
 function aplicarEstado(s) {
   // Os eventos são separados ANTES de pintar: é neles que está escrito o que
   // ainda é segredo. Pintando primeiro e olhando depois, o log, o descarte e

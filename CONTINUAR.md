@@ -31,6 +31,22 @@ ainda **hiberna** depois de ~15 min parado, e o primeiro acesso demora até uns
 O que **não** pega sozinho é a aba que ficou aberta desde antes do deploy —
 essa precisa de um F5.
 
+### Os números da cena são do SERVIDOR
+
+O que as bancadas ajustam vale para **todas as salas e todos os jogadores** —
+o servidor guarda (`src/ajustes.js`) e espalha. O `localStorage` saiu: com
+ele, cada navegador tinha a sua versão do jogo.
+
+Duas consequências que valem lembrar:
+
+- **não é permanente.** Morre num deploy e quando o Render hiberna. Para fixar,
+  o botão *Copiar para o código* devolve o bloco `PADRAO` pronto para colar em
+  `public/ajustes3d.js`.
+- **não tem dono.** Quem abrir `/teste` muda a cena de todo mundo.
+
+A lâmpada é o contrário: **por sala**. Balançar na sala principal não mexe na
+`/22`.
+
 Telas auxiliares, fora da partida:
 
 | rota | para quê |

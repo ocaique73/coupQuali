@@ -86,6 +86,12 @@
     // ---- câmera ----
     camPrimAltura: 2.12,
     camPrimDist: 1.34,
+    // Em 1ª pessoa: o quanto a cabeça vira para os lados (radianos) e o quanto
+    // a câmera pode RECUAR. Recuar demais tirava o jogador de dentro de si
+    // mesmo e ele ficava olhando os próprios braços de longe. Aproximar
+    // continua solto, que é como se olha a mesa de perto.
+    olharLimite: 0.55,
+    primZoomMax: 1.12,
     camTercAltura: 3.1,
     camTercDist: 1.78,
     camAbertura: 64, // ângulo de visão
@@ -164,36 +170,56 @@
     ["Câmera", [
       ["camPrimAltura", "1ª pessoa — altura", 1, 4, 0.02],
       ["camPrimDist", "1ª pessoa — recuo", 0.8, 2.5, 0.02],
+      ["olharLimite", "1ª pessoa — virar a cabeça", 0.15, 0.9, 0.01],
+      ["primZoomMax", "1ª pessoa — recuo máximo do zoom", 1, 2, 0.01],
       ["camTercAltura", "3ª pessoa — altura", 1.5, 6, 0.02],
       ["camTercDist", "3ª pessoa — recuo", 1, 3.5, 0.02],
       ["camAbertura", "Ângulo de visão", 35, 100, 1],
     ]],
   ];
 
-  const CHAVE = "coup.ajustes3d";
+  // Sempre parte do PADRAO: um número novo que eu acrescente aqui aparece para
+  // todo mundo, em vez de chegar indefinido.
+  const atual = Object.assign({}, PADRAO);
 
-  function lidos() {
+  // Quem leva o que foi salvo até o servidor. O client.js e a /personagem
+  // preenchem com um emit do socket.
+  //
+  // O localStorage SAIU daqui: guardado por navegador, mexer uma barra mudava
+  // só a mesa de quem mexeu e o mesmo jogo ficava diferente para cada pessoa
+  // na sala. Quem manda agora é o servidor, e o número vale para o jogo todo.
+  let mandar = null;
+
+  // Só o que difere do padrão viaja: assim o servidor guarda um punhado de
+  // números em vez de uma cópia inteira da tabela.
+  function diferenca() {
+    const d = {};
+    for (const k of Object.keys(PADRAO)) if (atual[k] !== PADRAO[k]) d[k] = atual[k];
+    return d;
+  }
+
+  // Arrastar a barra dispara um `set` por quadro. Manda o primeiro na hora (a
+  // mesa dos outros acompanha o arraste) e SEMPRE agenda um último — sem esse
+  // de trás, o valor final do arraste era justamente o que o freio do servidor
+  // engolia, e a barra parava num número que ninguém mais recebia.
+  let ultimoEnvio = 0;
+  let pendente = null;
+
+  function enviar(reset) {
+    ultimoEnvio = Date.now();
     try {
-      const cru = localStorage.getItem(CHAVE);
-      if (!cru) return {};
-      const o = JSON.parse(cru);
-      return o && typeof o === "object" ? o : {};
-    } catch {
-      return {};
+      mandar?.({ valores: diferenca(), reset: !!reset });
+    } catch (e) {
+      console.error("[ajustes]", e);
     }
   }
 
-  // Sempre parte do PADRAO: assim, um valor novo que eu adicione aqui aparece
-  // para quem já tem ajustes salvos, em vez de vir indefinido.
-  const atual = Object.assign({}, PADRAO, lidos());
-
-  function salvar() {
-    try {
-      const diff = {};
-      for (const k of Object.keys(PADRAO))
-        if (atual[k] !== PADRAO[k]) diff[k] = atual[k];
-      localStorage.setItem(CHAVE, JSON.stringify(diff));
-    } catch {}
+  function salvar(reset) {
+    clearTimeout(pendente);
+    if (reset) return enviar(true);
+    if (Date.now() - ultimoEnvio >= 150) enviar(false);
+    // 180 ms é mais folgado que o freio do servidor (120), então este passa
+    else pendente = setTimeout(() => enviar(false), 180);
   }
 
   // Quem quiser ser avisado de que um número mudou. A tela /personagem usa
@@ -216,6 +242,31 @@
     valores: atual,
     get: (k) => atual[k],
     escutar: (fn) => ouvintes.push(fn),
+
+    // ligado pelo client.js / personagem.js: é por aqui que o salvo sobe
+    aoSalvar(fn) {
+      mandar = fn;
+    },
+
+    // Chegou do servidor: é o que vale para o jogo. Nomes que esta versão do
+    // código não conhece são ignorados — é o que deixa o servidor guardar um
+    // mapa solto sem precisar repetir a tabela de barras lá dentro.
+    aplicarDeFora(obj) {
+      let mudou = false;
+      for (const k of Object.keys(PADRAO)) {
+        const v = obj && Object.prototype.hasOwnProperty.call(obj, k)
+          ? Number(obj[k])
+          : PADRAO[k];
+        const novo = Number.isFinite(v) ? v : PADRAO[k];
+        if (atual[k] !== novo) {
+          atual[k] = novo;
+          mudou = true;
+        }
+      }
+      if (mudou) avisar();
+      return mudou;
+    },
+
     set(k, v) {
       if (!(k in PADRAO)) return;
       atual[k] = Number(v);
@@ -224,9 +275,7 @@
     },
     restaurar() {
       Object.assign(atual, PADRAO);
-      try {
-        localStorage.removeItem(CHAVE);
-      } catch {}
+      salvar(true);
       avisar();
     },
     // O que a bancada copia para virar o novo padrão no código.

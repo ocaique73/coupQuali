@@ -104,8 +104,9 @@
     // O corpo do boneco tem bancada PRÓPRIA (/personagem, tela cheia): aqui
     // ele aparece pequeno e longe, e não dá para julgar junta nem chapéu.
     topo.innerHTML =
-      '<b>Ajustes do 3D</b><span class="bcNota">vale só para o 3D — ' +
-      'o corpo do boneco é em <a href="/personagem">/personagem</a></span>';
+      '<b>Ajustes do 3D</b><span class="bcNota">vale para <b>todas as salas</b>' +
+      ' — some no próximo deploy; use <i>Copiar para o código</i> para fixar.' +
+      ' O corpo do boneco é em <a href="/personagem">/personagem</a></span>';
 
     const fechar = document.createElement("button");
     fechar.className = "btn tiny";
@@ -211,6 +212,19 @@
 
     rodape.append(zerar, virar, copiar);
     box.appendChild(rodape);
+
+    // Outra pessoa (ou a /personagem noutra aba) mexeu numa barra: as daqui
+    // acompanham. A que está sob o dedo fica de fora, senão o valor pulava
+    // no meio do arraste.
+    A.escutar(() => {
+      for (const linha of corpo.querySelectorAll(".bcLinha")) {
+        const input = linha.querySelector("input");
+        if (input === document.activeElement) continue;
+        const k = linha.dataset.chave;
+        input.value = A.get(k);
+        linha.querySelector(".bcVal").textContent = A.get(k);
+      }
+    });
 
     document.body.appendChild(box);
   }

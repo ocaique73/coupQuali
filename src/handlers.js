@@ -5,8 +5,9 @@ const {
   MAX_SEATS, RESPONSE_MS, PLAYER_COLORS,
   SHIRTS, BODIES, SKINS, PROPS, HEADS,
   CHAT_MAX, CHAT_MIN_MS, EMOTE_MIN_MS, EMOTES,
-  LAMP_MIN_MS, LOOK_MIN_MS, LOOK_MAX, LAMP_MAX,
+  LAMP_MIN_MS, LOOK_MIN_MS, LOOK_MAX, LAMP_MAX, AJUSTE_MIN_MS,
 } = require("./constants");
+const ajustes = require("./ajustes");
 const {
   getRoom, addLog, pushEvent, findPlayer,
   seatedPlayers, inGamePlayers, isAlive, assignColor, electHost, ensureHost,
@@ -51,6 +52,12 @@ function register(io) {
   io.on("connection", (socket) => {
     let joinedRoomKey = null;
     let myPid = null; // identidade estável desta aba (não muda ao reconectar)
+    let ultimoAjuste = 0;
+
+    // Os números da cena chegam ANTES de entrar em sala: /personagem não entra
+    // em nenhuma, e a mesa precisa nascer já com o visual certo em vez de
+    // montar no padrão e pular para o ajustado um segundo depois.
+    socket.emit("ajustes", ajustes.atuais());
   
     socket.on("join", ({ roomKey, nick, pid, avatar, look, color }) => {
       const key = roomKeyFromPath(roomKey);
@@ -293,6 +300,22 @@ function register(io) {
       broadcast(room);
     });
   
+    /* ---------------- números da cena: valem para o jogo todo ------------- */
+
+    // A bancada (/teste e /personagem) salvou: passa a valer para TODAS as
+    // salas e todos os jogadores, que é o sentido de "virar padrão do jogo".
+    //
+    // NÃO tem dono: quem abre /teste muda a cena de todo mundo. É ferramenta
+    // de autor, não recurso de jogador — está anotado no CONTINUAR.md. Se um
+    // dia a sala virar pública, é aqui que entra a trava.
+    socket.on("ajustes", (d) => {
+      if (now() - ultimoAjuste < AJUSTE_MIN_MS) return;
+      ultimoAjuste = now();
+      const novos = ajustes.aplicar(d?.valores, !!d?.reset);
+      // para TODOS, inclusive quem está em outra sala: o número é do jogo
+      io.emit("ajustes", novos);
+    });
+
     /* ---------------- lâmpada e olhar: a cena, não o jogo ---------------- */
 
     // A lâmpada é da SALA. Quem empurra manda o ângulo e a velocidade; os

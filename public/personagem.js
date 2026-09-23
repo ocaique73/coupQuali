@@ -371,6 +371,21 @@ function ligar() {
     aviso.textContent = "ajustes3d.js não carregou — sem barras para mexer.";
     return;
   }
+
+  // O que se ajusta aqui vira padrão do JOGO, não desta aba: sobe para o
+  // servidor e desce para todas as salas. Sem socket, as barras ainda mexem o
+  // boneco desta tela, mas nada é guardado — e é melhor avisar do que deixar
+  // a pessoa ajustar meia hora e perder tudo.
+  if (typeof io === "function") {
+    const socket = io();
+    A.aoSalvar((d) => socket.emit("ajustes", d));
+    socket.on("ajustes", (o) => A.aplicarDeFora(o));
+    socket.on("connect_error", () => {
+      aviso.textContent = "sem conexão com o servidor — nada será salvo";
+    });
+  } else {
+    aviso.textContent = "socket.io não carregou — nada será salvo";
+  }
   try {
     montarCena();
   } catch (e) {
@@ -384,9 +399,19 @@ function ligar() {
   ligarBotoes();
   ligarMouse();
 
-  // Qualquer barra mexida remonta o boneco. O aviso vem do próprio
-  // ajustes3d.js, então mexer daqui ou de /teste dá no mesmo.
-  A.escutar(refazer);
+  // Qualquer barra mexida remonta o boneco, venha daqui, de /teste ou de outra
+  // pessoa: o aviso sai do próprio ajustes3d.js. As barras acompanham também,
+  // menos a que está sob o dedo — senão o valor pulava no meio do arraste.
+  A.escutar(() => {
+    refazer();
+    for (const linha of document.querySelectorAll("#corpo .bcLinha")) {
+      const input = linha.querySelector("input");
+      if (input === document.activeElement) continue;
+      const k = linha.dataset.chave;
+      input.value = A.get(k);
+      linha.querySelector(".bcVal").textContent = A.get(k);
+    }
+  });
   addEventListener("resize", redimensionar);
 }
 

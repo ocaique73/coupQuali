@@ -41,6 +41,8 @@ const DEFAULT_THEME = "politica";
 // todo momento. Estes limites são o que impede um mouse nervoso (ou um
 // cliente adulterado) de inundar a sala.
 const LAMP_MIN_MS = 45;
+// Arrastar uma barra da bancada dispara um evento por quadro; este é o freio.
+const AJUSTE_MIN_MS = 120;
 const LOOK_MIN_MS = 60;
 // até onde a cabeça vira para os lados, em radianos (~52°). A mesa gira
 // infinito no 3D; o pescoço não.
@@ -72,5 +74,5 @@ module.exports = {
   THEMES, DEFAULT_THEME,
   SHIRTS, BODIES, SKINS, PROPS, HEADS,
   CHAT_MAX, CHAT_MIN_MS, EMOTE_MIN_MS, EMOTES,
-  LAMP_MIN_MS, LOOK_MIN_MS, LOOK_MAX, LAMP_MAX,
+  LAMP_MIN_MS, LOOK_MIN_MS, LOOK_MAX, LAMP_MAX, AJUSTE_MIN_MS,
 };

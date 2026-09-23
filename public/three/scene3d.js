@@ -58,10 +58,16 @@ const lampFis = { z: 0, x: 0, vz: 0, vx: 0, t0: 0 };
 const LAMP_MAX = 0.55; // até onde dá para empurrar, em radianos
 // Altura do pescoço: é em volta deste ponto que a cabeça vira.
 const PESCOCO = 1.62;
-// Até onde a cabeça vira para os lados (~52°) e para cima/baixo. A mesa gira
-// infinito; o pescoço tem limite, senão o boneco dava a volta no próprio eixo.
+// TETO do quanto a cabeça vira. É o mesmo número do servidor (LOOK_MAX): o
+// valor da barra fica por baixo dele, então nada que a cena mande é recusado
+// do outro lado. A mesa gira infinito; o pescoço nunca.
 const OLHAR_MAX = 0.92;
 const OLHAR_MAX_Y = 0.42;
+
+// O quanto a cabeça vira de fato — barra da bancada, presa ao teto acima.
+function olharMax() {
+  return Math.min(OLHAR_MAX, Math.max(0.05, aj("olharLimite", 0.55)));
+}
 const flying = []; // moedas/cartas em movimento pela mesa
 const pops = []; // símbolos de gesto subindo acima do jogador
 // Cartas virando na mesa agora. Enquanto uma está aqui, o updateCards não
@@ -125,8 +131,14 @@ const trava = (v, m) => Math.max(-m, Math.min(m, v));
 // olha até onde o pescoço alcança.
 function meuOlhar() {
   return thirdPerson
-    ? trava(voltaPi(orbit.yaw), OLHAR_MAX)
-    : trava(olhar.yaw, OLHAR_MAX);
+    ? trava(voltaPi(orbit.yaw), olharMax())
+    : trava(olhar.yaw, olharMax());
+}
+
+// O recuo do zoom é limitado só em 1ª PESSOA. Aproximar continua solto nas
+// duas: é assim que se chega perto da mesa para ver uma carta.
+function zoomTeto() {
+  return thirdPerson ? ZOOM_MAX : Math.max(1, aj("primZoomMax", 1.12));
 }
 const PITCH_MIN = -0.25;
 const PITCH_MAX = 0.55;
@@ -1417,6 +1429,7 @@ export function lampadaDeFora(d) {
 export function olharDeFora(pid, yaw) {
   const s = seats.get(pid);
   if (!s || pid === myId) return;
+  // teto, não a barra: o outro pode estar com um limite diferente do meu
   s.olharAlvo = trava(Number(yaw) || 0, OLHAR_MAX);
 }
 
@@ -1524,7 +1537,7 @@ function onPointerMove(e) {
       // Os sentidos são os MESMOS da 3ª pessoa, senão trocar de câmera no meio
       // da partida invertia o mouse: arrastar para a direita vira o olhar
       // para a direita, arrastar para baixo abaixa o olhar para a mesa.
-      olhar.yaw = trava(olhar.yaw - dx * 0.005, OLHAR_MAX);
+      olhar.yaw = trava(olhar.yaw - dx * 0.005, olharMax());
       olhar.pitch = trava(olhar.pitch - dy * 0.004, OLHAR_MAX_Y);
     }
   }
@@ -1571,7 +1584,7 @@ function onPointerUp() {
 function onWheel(e) {
   e.preventDefault();
   const k = e.deltaY > 0 ? 1.08 : 1 / 1.08;
-  orbit.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, orbit.zoom * k));
+  orbit.zoom = Math.max(ZOOM_MIN, Math.min(zoomTeto(), orbit.zoom * k));
 }
 
 // duplo clique volta a câmera para o lugar
@@ -1761,6 +1774,9 @@ function posicionaCamera() {
   // 3ª pessoa; em 1ª a câmera fica firme no assento
   const giro = thirdPerson ? orbit.yaw : 0;
   const ang = Math.atan2(p.x, p.z) + giro;
+  // Trocar de 3ª para 1ª pessoa com o zoom bem aberto deixava o jogador longe,
+  // atrás do próprio boneco; o teto é aplicado aqui e não só na roda do mouse.
+  orbit.zoom = Math.min(orbit.zoom, zoomTeto());
   const raio = Math.hypot(p.x, p.z) * k * orbit.zoom;
   camera.position.set(
     Math.sin(ang) * raio,
@@ -1880,8 +1896,6 @@ export function update(state, meId, opts = {}) {
     // gigantes cobrindo a tela (em 1ª pessoa coladas na lente, em 3ª logo à
     // frente). O HUD no canto mostra tudo isso sem atrapalhar a cena.
     const souEu = p.id === meId;
-    // o corpo some só em 1ª pessoa — em 3ª eu quero me ver na mesa
-    const esconderMeuCorpo = souEu && !thirdPerson;
 
     if (current && state.turnEndsAt) {
       const txt = window.UI.timeLeft(state.turnEndsAt);
@@ -1913,17 +1927,20 @@ export function update(state, meId, opts = {}) {
     if (!s.isTarget)
       s.ring.material.color.set(COLORS[(p.color ?? 0) % COLORS.length]);
 
-    s.body.visible = !esconderMeuCorpo;
+    // O corpo fica visível para todo mundo, inclusive para mim em 1ª pessoa:
+    // são os MEUS braços e mãos na mesa, e sem eles a cena parecia um drone
+    // pairando sobre a cadeira. Quem decide o que some é o laço de animação,
+    // que sabe onde a câmera está neste quadro (ver "meu próprio corpo" lá).
+    s.body.visible = true;
     s.plate.visible = !souEu;
     // o balão some sozinho depois do tempo — e nunca fica no meu assento,
     // mesmo que eu já tivesse um na tela quando virei "eu" (troca de aba,
     // reconexão): ele viraria um letreiro colado na lente
     if (souEu || (s.chatLbl.visible && (s.chatAte || 0) < performance.now()))
       s.chatLbl.visible = false;
-    // Em 1ª pessoa a câmera fica DENTRO do meu próprio assento: fichas e halo
-    // envolviam a lente e viravam borrões amarelos tapando a tela.
-    s.chips.visible = !esconderMeuCorpo;
-    s.ring.visible = !esconderMeuCorpo;
+    s.chips.visible = true;
+    s.ring.visible = true;
+    s.euMesmo = souEu;
 
     // O tombo e a cor cinza esperam a carta terminar de virar: o corpo
     // caindo antes da revelação já contava o final.
@@ -2201,6 +2218,25 @@ function animate() {
 
   for (const [, s] of seats) {
     s.body.rotation.z = Math.sin(t * 0.8 + s.group.position.x) * 0.012;
+
+    // ---- meu próprio corpo em 1ª pessoa ----
+    //
+    // A CABEÇA sai: ela nasce na frente da lente e tapava a mesa inteira.
+    // O resto fica, porque ver os próprios braços e mãos é o que faz a
+    // primeira pessoa parecer primeira pessoa.
+    //
+    // E se a câmera chegar perto demais do tronco — aproximar o zoom atravessa
+    // o assento de propósito, para olhar a mesa de perto — aí o corpo todo
+    // some. É o que evitava o borrão que motivou esconder tudo antes: o
+    // problema era a lente DENTRO do boneco, não o boneco existir.
+    if (s.euMesmo) {
+      const dentro =
+        !thirdPerson && camera.position.distanceTo(s.group.position) < 0.72;
+      s.body.visible = !dentro;
+      s.chips.visible = !dentro;
+      const cab = s.body.userData.cabeca;
+      if (cab) cab.visible = thirdPerson;
+    }
 
     // suspense: as cartas do jogador tremem enquanto a mesa espera a virada
     if (s.tremeAte) {

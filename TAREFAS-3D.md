@@ -223,6 +223,38 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
       cintura, não a cabeça. O padrão deixou de ser triangular
 - [x] R6. Barras de **cabeça** (tamanho) e de **altura do boné/chapéu**
 
+## S. Ajustes do jogo, lâmpada por sala e 1ª pessoa
+
+- [x] S1. O que se ajusta em **/teste e /personagem vira padrão do JOGO**:
+      todas as salas, todos os jogadores. Antes ficava no localStorage de cada
+      navegador — mexer uma barra mudava só a mesa de quem mexeu, e dois
+      jogadores na mesma sala viam mesas diferentes. Agora o servidor é o dono:
+      quem salva manda para lá, e de lá desce para todos, inclusive para quem
+      entrar depois
+- [x] S2. **Lâmpada é por SALA** (já era, verificado com teste de três clientes
+      em duas salas): quem balança na sala principal não mexe na `/22`. É o
+      oposto dos ajustes, que são do jogo inteiro — as duas coisas passam por
+      caminhos diferentes de propósito
+- [x] S3. **1ª pessoa: ver os próprios braços e mãos.** O corpo inteiro era
+      escondido; agora só a **cabeça** sai (nasce na frente da lente e tapava a
+      mesa). Se o zoom aproximar até a lente entrar no tronco, o corpo some —
+      era esse borrão que motivou esconder tudo, e o problema era a lente
+      dentro do boneco, não o boneco existir
+- [x] S4. **1ª pessoa: olhar para os lados mais restrito** — de ~53° para ~31°,
+      e virou barra
+- [x] S5. **1ª pessoa: limite de recuo do zoom**, para não ficar atrás de si
+      mesmo vendo os braços de longe. Aproximar continua solto, que é como se
+      olha uma carta na mesa de perto
+
+> **Ajuste ao vivo não é permanente.** Ele vale na hora para todo mundo, mas é
+> estado do servidor: morre num deploy e quando o Render hiberna. Para um
+> número virar padrão de verdade existe o **Copiar para o código**, que devolve
+> o bloco `PADRAO` pronto para colar em `public/ajustes3d.js`.
+
+> **A bancada não tem dono.** Quem abrir `/teste` muda a cena de todos os
+> jogadores. É ferramenta de autor; se a sala virar pública um dia, é aí que
+> entra uma trava.
+
 ### O que ainda não foi visto rodando
 
 O servidor e a lógica foram testados: dois clientes de verdade numa sala, as

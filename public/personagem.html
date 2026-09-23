@@ -15,7 +15,11 @@
     <div id="painel" class="pgPainel">
       <div class="pgTopo">
         <b>Modelar personagem</b>
-        <span class="pgNota">vale para a mesa 3D e para a prévia do perfil</span>
+        <span class="pgNota"
+          >muda para <b>todas as salas e todos os jogadores</b> na hora. Mas é
+          estado do servidor: some num deploy ou quando o Render hiberna — para
+          fixar de verdade, <i>Copiar para o código</i></span
+        >
         <button id="encolher" class="btn tiny" title="Encolher">–</button>
       </div>
 
@@ -43,6 +47,9 @@
         }
       }
     </script>
+    <!-- O socket serve só para os ajustes: esta tela não entra em sala
+         nenhuma, mas o que ela salva vale para o jogo inteiro. -->
+    <script src="/socket.io/socket.io.js"></script>
     <script src="/ajustes3d.js"></script>
     <script src="/ui.js"></script>
     <script type="module" src="/personagem.js"></script>

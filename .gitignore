@@ -1,0 +1,7 @@
+# Numeros da cena salvos pela bancada em tempo de execucao.
+#
+# Fica FORA do repo de proposito: e estado da maquina que esta rodando, nao
+# codigo. No Render ele nem sobrevive a um deploy (disco efemero), e o caminho
+# para um numero virar permanente e o botao "Copiar para o codigo" da bancada,
+# que devolve o bloco PADRAO pronto para colar em public/ajustes3d.js.
+ajustes.json
