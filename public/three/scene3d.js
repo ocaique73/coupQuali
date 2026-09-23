@@ -673,19 +673,32 @@ function montarCabeca(g, tipo, hairMat, skinMat, darkMat) {
       const linha = Math.min(1.858 + subir, LINHA_MAX);
       g.add(calotaCraniana(corCap, linha));
 
-      // A ABA NASCE NA BORDA DA COPA. Antes ela ficava 4 cm acima dessa
-      // borda e cortava o meio do boné — era o "aba no meio".
+      // A ABA é uma MEIA-LUA com a borda RETA encostada na testa.
+      //
+      // Era uma cunha de disco de raio 0.185 centrada atrás, e o desenho
+      // disso não é aba: as duas pontas da cunha abriam até x=±0.156 — 2,4 cm
+      // além da copa de cada lado — e a borda de trás ia parar em z=-0.033,
+      // atrás do centro da cabeça. Ou seja, ela dava a volta pela lateral,
+      // que é a cara de viseira que aparecia na tela.
+      //
+      // Meia-lua resolve porque a borda reta é uma linha só, atravessada na
+      // testa: não sobra nada para varrer o lado. A borda fica um pouco para
+      // dentro da copa, então a emenda some debaixo do boné.
       const frente = craneoRaioZ(linha);
-      const compAba = 0.115;
-      const raioAba = 0.185;
+      const recuo = 0.035;
       const aba = new THREE.Mesh(
-        // disco parcial: só o pedaço da frente, como aba de boné
-        new THREE.CylinderGeometry(raioAba, raioAba, 0.016, 22, 1, false, -1.0, 2.0),
+        // meio disco: de -90° a +90° em volta do +Z, ou seja só a metade da
+        // frente. Fica em raio 1 e o tamanho sai todo do scale, para as
+        // barras da bancada mandarem direto nele.
+        new THREE.CylinderGeometry(1, 1, 1, 26, 1, false, -Math.PI / 2, Math.PI),
         corCap,
       );
-      // o disco é centrado, então recua metade dele para a ponta cair na
-      // distância certa à frente da testa
-      aba.position.set(0, linha - 0.008, frente + compAba - raioAba);
+      aba.scale.set(
+        aj("abaLargura", 0.142),
+        0.018,
+        recuo + aj("abaComprimento", 0.1),
+      );
+      aba.position.set(0, linha - 0.008, frente - recuo);
       aba.rotation.x = -0.16; // levanta a ponta, como aba de verdade
       aba.castShadow = true;
       g.add(aba);

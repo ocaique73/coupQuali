@@ -365,6 +365,13 @@ acompanham a cabeça.
       distância da mesa
 - [x] W6. Chapéu de cowboy refeito na mesma lógica: aba dando a volta na
       altura da linha e copa pousada nela
+- [x] W8. BUG: **aba do boné com cara de viseira.** Era uma cunha de disco de
+      raio 0.185 centrada atrás: as pontas da cunha abriam até x=±0.156 (2,4 cm
+      além da copa de cada lado) e a borda de trás ia parar em z=−0.033, atrás
+      do centro da cabeça — ou seja, a aba dava a volta pela lateral. Virou uma
+      **meia-lua com a borda reta atravessada na testa**: a borda é uma linha
+      só, não sobra nada para varrer o lado, e ela fica para dentro da copa,
+      escondendo a emenda. Avanço e largura viraram barras
 
 ### O que ainda não foi visto rodando
 

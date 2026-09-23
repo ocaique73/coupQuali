@@ -53,6 +53,10 @@
     boneAltura: 0,
     chapeuAltura: 0,
     cabeloAltura: 0,
+    // tamanho da aba do boné: o quanto ela avança à frente da testa e a
+    // meia-largura dela. A copa tem ~0.131 de meia-largura nessa altura.
+    abaComprimento: 0.1,
+    abaLargura: 0.142,
 
     // ---- cartas e fichas na mesa ----
     cartaTamanho: 1.0,
@@ -145,6 +149,8 @@
       ["boneAltura", "Linha do boné na testa", -0.07, 0.02, 0.002],
       ["chapeuAltura", "Altura do chapéu", -0.07, 0.09, 0.002],
       ["cabeloAltura", "Linha do cabelo na testa", -0.07, 0.03, 0.002],
+      ["abaComprimento", "Aba do boné — avanço", 0.03, 0.2, 0.005],
+      ["abaLargura", "Aba do boné — largura", 0.08, 0.22, 0.005],
     ]],
     ["Cartas e fichas", [
       ["cartaTamanho", "Tamanho da carta", 0.5, 2, 0.02],
