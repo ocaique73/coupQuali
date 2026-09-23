@@ -255,6 +255,39 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
 > jogadores. É ferramenta de autor; se a sala virar pública um dia, é aí que
 > entra uma trava.
 
+## T. Desenho dos personagens e ajustes permanentes
+
+- [x] T1. **Tronco torneado** em vez de cano. Era um cilindro reto, sem peito e
+      com degrau seco na emenda dos ombros. Virou um perfil girado: engrossa no
+      peito e fecha em curva na direção do pescoço, que é o "ombro fundido" da
+      referência. As barras continuam mandando na largura — o perfil só decide
+      o caminho entre a cintura e o ombro
+- [x] T2. **Ombro como deltoide**, esfera caída para fora em vez de bola de
+      gude: a bola redonda lia como ombreira
+- [x] T3. **Cabelo com volume**: calota, topete inclinado para trás, onda na
+      frente e costeletas. Era meia esfera com uma caixinha de franja, que lia
+      como touca
+- [x] T4. **Sobrancelha grossa e inclinada** — a essa distância é ela que dá a
+      expressão; a fina sumia e o rosto ficava vazio
+- [x] T5. **Mandíbula e queixo**, para o rosto não terminar numa bola. Nariz
+      um pouco maior
+- [x] T6. **Mão**: palma com os cantos quebrados e a carne do polegar fechando
+      o vão — a caixa crua lia como luva de robô
+- [x] T7. **Altura separada por item de cabeça** (boné, chapéu, cabelo). Com
+      uma barra só, subir o boné até sair dos olhos jogava o chapéu de cowboy
+      para cima da cabeça: eles assentam em alturas diferentes
+- [x] T8. **1ª pessoa mostra SÓ os braços.** Tirar a cabeça não bastava —
+      tronco e ombros continuavam ocupando o meio da tela. Agora a varredura é
+      pelos filhos do corpo: peça nova que eu acrescente já nasce escondida em
+      vez de aparecer sozinha na lente
+- [x] T9. **Ajuste permanente**: botão *Fixar permanente* commita o
+      `ajustes.json` no repositório (API do GitHub com token, ou baixando para
+      commitar na mão). É o único lugar que sobrevive a um redeploy, porque é
+      de lá que o deploy nasce
+- [x] T10. O carregador do `ajustes.json` ignora **BOM** — editor do Windows
+      grava três bytes invisíveis na frente e o `JSON.parse` engasgava: o
+      arquivo parecia perfeito na tela e a cena subia no padrão sem explicar
+
 ### O que ainda não foi visto rodando
 
 O servidor e a lógica foram testados: dois clientes de verdade numa sala, as

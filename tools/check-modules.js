@@ -9,6 +9,8 @@ const GLOBALS = new Set([
   "clearTimeout", "clearInterval", "Math", "Date", "Object", "Array", "JSON",
   "Number", "String", "Boolean", "Set", "Map", "Promise", "isNaN", "parseInt",
   "parseFloat", "process", "Error", "RegExp", "Infinity", "io", "socket",
+  // globais do Node 18+ que o servidor usa de verdade
+  "fetch", "Buffer", "URL", "structuredClone",
 ]);
 const KW = /^(if|for|while|switch|catch|return|typeof|new|function|of|in|do|else|try|throw|delete|void|await|async)$/;
 

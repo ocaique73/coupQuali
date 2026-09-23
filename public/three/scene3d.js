@@ -530,9 +530,20 @@ const HAIRS = [0x1c1410, 0x2a1d14, 0x4a3520, 0x6b4a2a, 0x9a6b3f, 0xd9b380];
 function buildHand(skinMat) {
   const h = new THREE.Group();
 
-  const palm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.045, 0.1), skinMat);
+  // Palma com os cantos quebrados: caixa crua lia como luva de robô, e a
+  // mão é o que mais aparece na mesa depois do rosto.
+  const palm = new THREE.Mesh(
+    new THREE.BoxGeometry(0.105, 0.05, 0.1, 2, 2, 2),
+    skinMat,
+  );
   palm.castShadow = true;
   h.add(palm);
+
+  // a carne do polegar, que fecha o vão entre a palma e o polegar
+  const base = new THREE.Mesh(new THREE.SphereGeometry(0.032, 12, 10), skinMat);
+  base.scale.set(0.9, 0.62, 1.15);
+  base.position.set(0.034, 0, 0.016);
+  h.add(base);
 
   // índice 0 = mindinho ... índice 3 = indicador (o mais perto do polegar)
   const fingers = [];
@@ -592,13 +603,23 @@ function poseHand(h, nome) {
 
 // Cabelo, careca, boné ou chapéu de cowboy. Careca não desenha nada: a
 // cabeça de pele já está pronta por baixo.
-// O `subir` é a barra da bancada: levanta ou abaixa boné e chapéu sem mexer
-// no resto do rosto.
+// Cada item de cabeça tem a SUA barra de altura.
 //
-// Referências de altura do rosto, para nada voltar a tapar os olhos: olhos em
-// 1.79, sobrancelha em 1.829 (topo ~1.836), alto da cabeça em 1.927.
-function montarCabeca(g, tipo, hairMat, skinMat, darkMat, subir = 0) {
+// Com uma barra só, subir o boné até sair dos olhos já jogava o chapéu de
+// cowboy para cima da cabeça: eles assentam em alturas diferentes porque têm
+// formatos diferentes. O cabelo entra na conta pelo mesmo motivo.
+//
+// Referências do rosto, para nada voltar a tapar os olhos: olhos em 1.79,
+// topo da sobrancelha em ~1.845, alto da cabeça em 1.927.
+function montarCabeca(g, tipo, hairMat, skinMat, darkMat) {
   if (tipo === "bald") return;
+
+  const subir =
+    tipo === "cap"
+      ? aj("boneAltura", 0)
+      : tipo === "cowboy"
+        ? aj("chapeuAltura", 0)
+        : aj("cabeloAltura", 0);
 
   if (tipo === "cap" || tipo === "cowboy") {
     const corCap = tipo === "cap" ? darkMat : new THREE.MeshStandardMaterial({
@@ -647,18 +668,44 @@ function montarCabeca(g, tipo, hairMat, skinMat, darkMat, subir = 0) {
     return;
   }
 
-  // cabelo
-  const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.178, 24, 18, 0, Math.PI * 2, 0, Math.PI / 1.85),
+  // CABELO com volume e topete.
+  //
+  // Era meia esfera colada no crânio mais uma caixinha de franja: lia como
+  // touca. O estilo pede massa — a calota cobre a cabeça, o topete levanta na
+  // frente e as costeletas descem na frente da orelha. Três peças simples,
+  // porque a essa distância o que se vê é a silhueta, não o fio.
+  const calota = new THREE.Mesh(
+    new THREE.SphereGeometry(0.181, 26, 20, 0, Math.PI * 2, 0, Math.PI / 1.75),
     hairMat,
   );
-  hair.scale.set(0.95, 1.1, 1);
-  hair.position.y = 1.757;
-  g.add(hair);
+  calota.scale.set(0.97, 1.08, 1.02);
+  calota.position.y = 1.752 + subir;
+  calota.castShadow = true;
+  g.add(calota);
 
-  const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.05), hairMat);
-  fringe.position.set(0, 1.85, 0.118);
-  g.add(fringe);
+  // o topete: uma esfera esticada, inclinada para trás, saindo da testa
+  const topete = new THREE.Mesh(new THREE.SphereGeometry(0.115, 20, 16), hairMat);
+  topete.scale.set(1.12, 0.66, 0.78);
+  topete.position.set(0, 1.895 + subir, 0.052);
+  topete.rotation.x = -0.42;
+  topete.castShadow = true;
+  g.add(topete);
+
+  // a onda da frente, que quebra a linha reta da franja
+  const onda = new THREE.Mesh(new THREE.SphereGeometry(0.072, 16, 12), hairMat);
+  onda.scale.set(1.25, 0.6, 0.85);
+  onda.position.set(-0.035, 1.862 + subir, 0.116);
+  onda.rotation.set(-0.25, 0, 0.3);
+  g.add(onda);
+
+  for (const sx of [-1, 1]) {
+    const costeleta = new THREE.Mesh(
+      new THREE.BoxGeometry(0.022, 0.07, 0.045),
+      hairMat,
+    );
+    costeleta.position.set(sx * 0.148, 1.752 + subir, 0.022);
+    g.add(costeleta);
+  }
 }
 
 // A foto do perfil NÃO entra aqui: ela aparece na placa acima da cabeça,
@@ -719,16 +766,36 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
   hips.castShadow = true;
   g.add(hips);
 
+  // TRONCO torneado, não um cano.
+  //
+  // Era um cilindro reto: sem peito, sem cintura e com um degrau seco na
+  // emenda com os ombros. Agora é um perfil girado — a silhueta engrossa no
+  // peito e fecha em curva na direção do pescoço, que é o "ombro fundido"
+  // do estilo. As barras continuam mandando na largura: o perfil só decide o
+  // CAMINHO entre a cintura e o ombro.
+  const rOmbro = aj("troncoOmbro", 0.26) * W;
+  const rCintura = aj("troncoCintura", 0.24) * W;
+  const perfil = [];
+  const PASSOS = 14;
+  for (let i = 0; i <= PASSOS; i++) {
+    const t = i / PASSOS; // 0 = cintura, 1 = topo dos ombros
+    // largura base sobe da cintura ao ombro...
+    const base = rCintura + (rOmbro - rCintura) * t;
+    // ...com o peito um pouco mais cheio no meio do caminho
+    const peito = Math.sin(t * Math.PI) * rOmbro * 0.085;
+    perfil.push(new THREE.Vector2(base + peito, cintura + troncoH * t));
+  }
+  // o trapézio: a partir do ombro a linha fecha em curva para o pescoço, em
+  // vez de cortar reto
+  for (let i = 1; i <= 4; i++) {
+    const t = i / 4;
+    const r = rOmbro * (1 - 0.62 * Math.sin((t * Math.PI) / 2));
+    perfil.push(new THREE.Vector2(Math.max(0.09, r), ombroY + 0.1 * t));
+  }
   const torso = new THREE.Mesh(
-    new THREE.CylinderGeometry(
-      aj("troncoOmbro", 0.26) * W,
-      aj("troncoCintura", 0.24) * W,
-      troncoH,
-      22,
-    ),
+    new THREE.LatheGeometry(perfil, 26),
     shirtMat,
   );
-  torso.position.y = ombroY - troncoH / 2;
   torso.castShadow = true;
   g.add(torso);
 
@@ -743,21 +810,27 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
   // Bola do ombro. Era 0.115 contra 0.07 do braço — uma esfera muito maior
   // do que o braço que sai dela, e o boneco ficava com ombreira de jogador
   // de futebol americano.
+  // Ombro como DELTOIDE: uma esfera achatada e caída para fora, não uma bola.
+  // A bola redonda lia como ombreira; o oval acompanha a curva do tronco e
+  // emenda no braço.
   for (const sx of [-1, 1]) {
     const sh = new THREE.Mesh(
-      new THREE.SphereGeometry(aj("ombroTamanho", 0.09) * W, 14, 12),
+      new THREE.SphereGeometry(aj("ombroTamanho", 0.09) * W, 16, 14),
       shirtMat,
     );
-    sh.position.set(sx * ombroX * W, ombroY, 0);
+    sh.scale.set(1.05, 1.25, 1.05);
+    sh.position.set(sx * ombroX * W, ombroY - 0.02, 0);
+    sh.rotation.z = -sx * 0.25;
     sh.castShadow = true;
     g.add(sh);
   }
 
+  // gola: o acabamento da camisa onde o tronco fecha
   const collar = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.12, 0.17, 0.09, 16),
+    new THREE.CylinderGeometry(0.105, 0.135, 0.07, 18),
     shirtMat,
   );
-  collar.position.y = ombroY + 0.07;
+  collar.position.y = ombroY + 0.115;
   g.add(collar);
 
   const neck = new THREE.Mesh(
@@ -800,9 +873,9 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
     rosto.add(ear);
   }
 
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.07, 10), skinMat);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.078, 12), skinMat);
   nose.rotation.x = Math.PI / 2;
-  nose.position.set(0, 1.73, 0.163);
+  nose.position.set(0, 1.732, 0.166);
   rosto.add(nose);
   g.userData.nose = nose; // cresce no gesto de "mentira"
 
@@ -818,9 +891,12 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
     d.position.set(sx * 0.062, 1.79, 0.167);
     rosto.add(d);
 
-    const br = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.013, 0.02), hairMat);
-    br.position.set(sx * 0.062, 1.829, 0.151);
-    br.rotation.z = sx * 0.12;
+    // Sobrancelha GROSSA e inclinada: a essa distância é ela que dá a
+    // expressão. A fina de antes sumia e o rosto ficava vazio.
+    const br = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.021, 0.026), hairMat);
+    br.position.set(sx * 0.063, 1.834, 0.148);
+    // inclina de fora para dentro: cara de quem está avaliando a jogada
+    br.rotation.set(-0.12, 0, sx * 0.2);
     rosto.add(br);
   }
 
@@ -832,13 +908,22 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
   rosto.add(mouth);
   g.userData.mouth = mouth; // abre e fecha no gesto de rir
 
-  const chin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 14, 10), skinMat);
-  chin.scale.set(1, 0.6, 0.85);
-  chin.position.set(0, 1.645, 0.06);
+  // Queixo e mandíbula. O queixo sozinho deixava o rosto terminando numa
+  // bola; a mandíbula dá o canto que o estilo pede, sem sair do cartum.
+  const chin = new THREE.Mesh(new THREE.SphereGeometry(0.083, 16, 12), skinMat);
+  chin.scale.set(0.96, 0.62, 0.9);
+  chin.position.set(0, 1.647, 0.055);
   rosto.add(chin);
 
+  for (const sx of [-1, 1]) {
+    const mand = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 10), skinMat);
+    mand.scale.set(0.7, 0.85, 1.15);
+    mand.position.set(sx * 0.1, 1.676, 0.03);
+    rosto.add(mand);
+  }
+
   // cabelo, boné e chapéu também vão no pivô: viram junto com o rosto
-  montarCabeca(rosto, L.head || "hair", hairMat, skinMat, darkMat, aj("chapeuAltura", 0));
+  montarCabeca(rosto, L.head || "hair", hairMat, skinMat, darkMat);
 
   // Braço ESQUERDO segura as cartas; o DIREITO fica livre para os gestos.
   //
@@ -2221,21 +2306,18 @@ function animate() {
 
     // ---- meu próprio corpo em 1ª pessoa ----
     //
-    // A CABEÇA sai: ela nasce na frente da lente e tapava a mesa inteira.
-    // O resto fica, porque ver os próprios braços e mãos é o que faz a
-    // primeira pessoa parecer primeira pessoa.
+    // Fica SÓ o par de braços. Tronco, ombros, quadril, gola, pescoço e cabeça
+    // saem todos: em primeira pessoa eu não enxergo o meu próprio peito, e
+    // deixá-lo na tela era um boneco de costas ocupando o meio da mesa.
     //
-    // E se a câmera chegar perto demais do tronco — aproximar o zoom atravessa
-    // o assento de propósito, para olhar a mesa de perto — aí o corpo todo
-    // some. É o que evitava o borrão que motivou esconder tudo antes: o
-    // problema era a lente DENTRO do boneco, não o boneco existir.
+    // A varredura é pelos filhos do corpo em vez de uma lista de nomes: peça
+    // nova que eu acrescente ao boneco já nasce escondida aqui, em vez de
+    // aparecer sozinha na lente até alguém lembrar de listá-la.
     if (s.euMesmo) {
-      const dentro =
-        !thirdPerson && camera.position.distanceTo(s.group.position) < 0.72;
-      s.body.visible = !dentro;
-      s.chips.visible = !dentro;
-      const cab = s.body.userData.cabeca;
-      if (cab) cab.visible = thirdPerson;
+      const soBracos = !thirdPerson;
+      const bracos = s.body.userData.arms;
+      for (const parte of s.body.children)
+        parte.visible = !soBracos || parte === bracos;
     }
 
     // suspense: as cartas do jogador tremem enquanto a mesa espera a virada

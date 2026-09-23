@@ -3593,3 +3593,18 @@ h2.comBotao .btn.tiny {
 #helpBtn {
   font-weight: 900;
 }
+
+/* recado da bancada depois de "Fixar permanente" */
+.bcRecado {
+  flex-basis: 100%;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted);
+  min-height: 0;
+}
+.bcRecado.bom {
+  color: var(--green);
+}
+.bcRecado.ruim {
+  color: var(--red);
+}

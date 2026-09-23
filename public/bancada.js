@@ -91,6 +91,51 @@
   /* o painel                                                            */
   /* ------------------------------------------------------------------ */
 
+
+// Botão "Fixar": o único jeito de um número sobreviver a um redeploy.
+//
+// O disco do Render é efêmero; o repositório não. Com GITHUB_TOKEN no
+// servidor isto vira um commit do ajustes.json e o deploy seguinte já sobe
+// com ele. Sem token, o arquivo é baixado para commitar na mão — mesmo
+// resultado, um passo a mais.
+function montarFixar(A, onde, dizer) {
+  const b = document.createElement("button");
+  b.className = "btn small primary";
+  b.textContent = "Fixar permanente";
+  b.title = "Grava os números no repositório: sobrevive a deploy e hibernação";
+  b.onclick = async () => {
+    const antes = b.textContent;
+    b.disabled = true;
+    b.textContent = "Fixando...";
+    const r = await A.fixar();
+    b.disabled = false;
+    b.textContent = antes;
+
+    if (r.ok) return dizer(r.texto || "Fixado no repositório.", true);
+
+    // sem token: entrega o arquivo para a pessoa commitar
+    if (r.conteudo) {
+      try {
+        const url = URL.createObjectURL(
+          new Blob([r.conteudo], { type: "application/json" }),
+        );
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "ajustes.json";
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        return dizer(
+          "Baixei o ajustes.json — commite na raiz do projeto para fixar.",
+          true,
+        );
+      } catch {}
+    }
+    dizer(r.texto || "Não deu para fixar.", false);
+  };
+  onde.appendChild(b);
+  return b;
+}
+
   function montarPainel() {
     const A = window.AJUSTES3D;
     if (!A) return;
@@ -212,6 +257,14 @@
 
     rodape.append(zerar, virar, copiar);
     box.appendChild(rodape);
+
+    const recado = document.createElement("div");
+    recado.className = "bcRecado";
+    rodape.appendChild(recado);
+    montarFixar(A, rodape, (txt, bom) => {
+      recado.textContent = txt;
+      recado.className = "bcRecado " + (bom ? "bom" : "ruim");
+    });
 
     // Outra pessoa (ou a /personagem noutra aba) mexeu numa barra: as daqui
     // acompanham. A que está sob o dedo fica de fora, senão o valor pulava

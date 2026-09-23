@@ -316,6 +316,20 @@ function register(io) {
       io.emit("ajustes", novos);
     });
 
+    // "Fixar": commita o ajustes.json no repositório, que é o único lugar que
+    // sobrevive a um redeploy — é de lá que o deploy nasce. Sem token no
+    // servidor devolve o arquivo para o navegador baixar e commitar na mão.
+    socket.on("ajustes_fixar", async (_d, cb) => {
+      if (typeof cb !== "function") return;
+      if (now() - ultimoAjuste < AJUSTE_MIN_MS) return cb({ ok: false, texto: "devagar aí" });
+      ultimoAjuste = now();
+      try {
+        cb(await ajustes.fixar());
+      } catch (e) {
+        cb({ ok: false, texto: e.message });
+      }
+    });
+
     /* ---------------- lâmpada e olhar: a cena, não o jogo ---------------- */
 
     // A lâmpada é da SALA. Quem empurra manda o ângulo e a velocidade; os

@@ -42,7 +42,12 @@
 
     // ---- cabeça ----
     cabecaTamanho: 1.0,
-    chapeuAltura: 0, // sobe ou desce boné e chapéu
+    // Uma altura POR tipo: boné, chapéu e cabelo assentam em alturas
+    // diferentes, e uma barra só fazia um subir demais enquanto o outro
+    // ainda estava baixo.
+    boneAltura: 0,
+    chapeuAltura: 0,
+    cabeloAltura: 0,
 
     // ---- cartas e fichas na mesa ----
     cartaTamanho: 1.0,
@@ -130,7 +135,9 @@
     ]],
     ["Cabeça e chapéu", [
       ["cabecaTamanho", "Tamanho da cabeça", 0.6, 1.5, 0.01],
-      ["chapeuAltura", "Altura do boné/chapéu", -0.12, 0.2, 0.005],
+      ["boneAltura", "Altura do boné", -0.12, 0.2, 0.005],
+      ["chapeuAltura", "Altura do chapéu", -0.12, 0.2, 0.005],
+      ["cabeloAltura", "Altura do cabelo", -0.1, 0.15, 0.005],
     ]],
     ["Cartas e fichas", [
       ["cartaTamanho", "Tamanho da carta", 0.5, 2, 0.02],
@@ -189,6 +196,7 @@
   // só a mesa de quem mexeu e o mesmo jogo ficava diferente para cada pessoa
   // na sala. Quem manda agora é o servidor, e o número vale para o jogo todo.
   let mandar = null;
+  let fixarNoRepo = null;
 
   // Só o que difere do padrão viaja: assim o servidor guarda um punhado de
   // números em vez de uma cópia inteira da tabela.
@@ -246,6 +254,27 @@
     // ligado pelo client.js / personagem.js: é por aqui que o salvo sobe
     aoSalvar(fn) {
       mandar = fn;
+    },
+
+    // Pedido de "fixar no repositório". Quem liga é quem tem o socket.
+    aoFixar(fn) {
+      fixarNoRepo = fn;
+    },
+    fixar() {
+      return new Promise((resolve) => {
+        if (!fixarNoRepo)
+          return resolve({ ok: false, texto: "sem conexão com o servidor" });
+        // a resposta pode demorar (é uma ida ao GitHub): não deixa o botão
+        // preso para sempre se ela nunca vier
+        const prazo = setTimeout(
+          () => resolve({ ok: false, texto: "o servidor não respondeu" }),
+          15000,
+        );
+        fixarNoRepo((r) => {
+          clearTimeout(prazo);
+          resolve(r || { ok: false, texto: "resposta vazia" });
+        });
+      });
     },
 
     // Chegou do servidor: é o que vale para o jogo. Nomes que esta versão do

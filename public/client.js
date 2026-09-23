@@ -300,6 +300,7 @@ socket.on("me", ({ pid }) => {
 // Antes isso morava no localStorage e cada navegador tinha a sua versão do
 // jogo — dois jogadores na mesma mesa viam mesas diferentes.
 window.AJUSTES3D?.aoSalvar((d) => socket.emit("ajustes", d));
+window.AJUSTES3D?.aoFixar((cb) => socket.emit("ajustes_fixar", {}, cb));
 socket.on("ajustes", (o) => {
   if (window.AJUSTES3D?.aplicarDeFora(o)) push3D();
 });

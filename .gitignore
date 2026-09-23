@@ -1,7 +1,8 @@
-# Numeros da cena salvos pela bancada em tempo de execucao.
+# O ajustes.json NAO entra aqui de proposito.
 #
-# Fica FORA do repo de proposito: e estado da maquina que esta rodando, nao
-# codigo. No Render ele nem sobrevive a um deploy (disco efemero), e o caminho
-# para um numero virar permanente e o botao "Copiar para o codigo" da bancada,
-# que devolve o bloco PADRAO pronto para colar em public/ajustes3d.js.
-ajustes.json
+# Ele e o unico lugar onde um numero da bancada sobrevive a um redeploy: o
+# disco do Render e efemero, e o deploy nasce do repositorio. O botao "Fixar
+# permanente" da bancada commita este arquivo (direto pela API do GitHub, se
+# houver GITHUB_TOKEN, ou baixando para commitar na mao).
+#
+# Se um dia ele for ignorado, "fixar" para de funcionar.

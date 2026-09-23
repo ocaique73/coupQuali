@@ -37,12 +37,33 @@ O que as bancadas ajustam vale para **todas as salas e todos os jogadores** —
 o servidor guarda (`src/ajustes.js`) e espalha. O `localStorage` saiu: com
 ele, cada navegador tinha a sua versão do jogo.
 
-Duas consequências que valem lembrar:
+Ajustar uma barra vale na hora para todo mundo, mas fica só na memória do
+servidor: morre num deploy e quando o Render hiberna.
 
-- **não é permanente.** Morre num deploy e quando o Render hiberna. Para fixar,
-  o botão *Copiar para o código* devolve o bloco `PADRAO` pronto para colar em
-  `public/ajustes3d.js`.
-- **não tem dono.** Quem abrir `/teste` muda a cena de todo mundo.
+**Para fixar de verdade existe o botão "Fixar permanente"**, nas duas bancadas.
+O único lugar que sobrevive a um redeploy é o repositório — é dele que o deploy
+nasce — então o botão grava `ajustes.json` lá. Dois caminhos:
+
+- **com token:** commita direto pela API do GitHub. Precisa de duas variáveis
+  de ambiente no painel do Render:
+
+  | variável | valor |
+  | --- | --- |
+  | `GITHUB_TOKEN` | token com permissão de escrita em *Contents* |
+  | `GITHUB_REPO` | `ocaique73/coupQuali` |
+  | `GITHUB_BRANCH` | opcional, `main` por padrão |
+
+  O token fica só dentro das chamadas do `src/ajustes.js`: não vai para log
+  nem para o navegador.
+
+- **sem token:** o botão baixa o `ajustes.json` para commitar na mão. Mesmo
+  resultado, um passo a mais.
+
+O `ajustes.json` **não** está no `.gitignore` de propósito — se for ignorado,
+"fixar" para de funcionar. O *Copiar para o código* continua existindo para
+quando um número merecer virar `PADRAO` no `public/ajustes3d.js`.
+
+E **a bancada não tem dono**: quem abrir `/teste` muda a cena de todo mundo.
 
 A lâmpada é o contrário: **por sala**. Balançar na sala principal não mexe na
 `/22`.
