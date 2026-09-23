@@ -20,6 +20,30 @@
     bonecoAltura: 0, // sobe ou desce o boneco inteiro
     bonecoInclina: 0, // 0 = de pé; positivo deita para a frente
 
+    // ---- corpo do boneco (a tela /personagem mexe nisto) ----
+    ombroAltura: 1.43, // altura da junta do ombro; o tronco pendura daqui
+    ombroLargura: 0.29, // distância do ombro ao centro
+    ombroTamanho: 0.09, // raio da bola do ombro
+    troncoOmbro: 0.26, // raio do tronco em cima
+    troncoCintura: 0.24, // raio do tronco na cintura
+    troncoAltura: 0.52,
+    quadrilRaio: 0.27,
+
+    // ---- braços ----
+    // O ângulo é em radianos: 0 é o braço reto para baixo, negativo joga
+    // para a frente. O comprimento é só a parte reta da cápsula.
+    bracoGrossura: 0.07,
+    bracoComprimento: 0.24,
+    bracoAngulo: -0.55,
+    anteGrossura: 0.058,
+    anteComprimento: 0.24,
+    anteAngulo: -1.25,
+    maoAngulo: 0.9, // o quanto a mão quebra em relação ao antebraço
+
+    // ---- cabeça ----
+    cabecaTamanho: 1.0,
+    chapeuAltura: 0, // sobe ou desce boné e chapéu
+
     // ---- cartas e fichas na mesa ----
     cartaTamanho: 1.0,
     cartaBorda: 0.34, // o quanto as cartas ficam para dentro da borda
@@ -79,6 +103,28 @@
       ["bonecoEscala", "Tamanho", 0.5, 1.8, 0.01],
       ["bonecoAltura", "Altura", -0.8, 0.8, 0.01],
       ["bonecoInclina", "Inclinação (0 = de pé)", -0.5, 0.6, 0.01],
+    ]],
+    ["Tronco e ombros", [
+      ["ombroAltura", "Altura do ombro", 1.1, 1.7, 0.005],
+      ["ombroLargura", "Largura dos ombros", 0.15, 0.45, 0.005],
+      ["ombroTamanho", "Bola do ombro", 0.02, 0.18, 0.005],
+      ["troncoOmbro", "Tronco em cima", 0.14, 0.4, 0.005],
+      ["troncoCintura", "Tronco na cintura", 0.14, 0.4, 0.005],
+      ["troncoAltura", "Altura do tronco", 0.3, 0.75, 0.01],
+      ["quadrilRaio", "Quadril", 0.15, 0.4, 0.005],
+    ]],
+    ["Braços", [
+      ["bracoGrossura", "Grossura do braço", 0.03, 0.12, 0.002],
+      ["bracoComprimento", "Comprimento do braço", 0.1, 0.45, 0.005],
+      ["bracoAngulo", "Ângulo do braço", -1.6, 0.3, 0.01],
+      ["anteGrossura", "Grossura do antebraço", 0.03, 0.12, 0.002],
+      ["anteComprimento", "Comprimento do antebraço", 0.1, 0.45, 0.005],
+      ["anteAngulo", "Ângulo do antebraço", -2, 0.3, 0.01],
+      ["maoAngulo", "Quebra do pulso", -0.6, 1.8, 0.02],
+    ]],
+    ["Cabeça e chapéu", [
+      ["cabecaTamanho", "Tamanho da cabeça", 0.6, 1.5, 0.01],
+      ["chapeuAltura", "Altura do boné/chapéu", -0.12, 0.2, 0.005],
     ]],
     ["Cartas e fichas", [
       ["cartaTamanho", "Tamanho da carta", 0.5, 2, 0.02],
@@ -150,23 +196,38 @@
     } catch {}
   }
 
+  // Quem quiser ser avisado de que um número mudou. A tela /personagem usa
+  // para refazer o boneco na hora; a cena da mesa continua usando o tune().
+  const ouvintes = [];
+  function avisar() {
+    window.COUP3D?.tune?.();
+    for (const fn of ouvintes) {
+      try {
+        fn();
+      } catch (e) {
+        console.error("[ajustes]", e);
+      }
+    }
+  }
+
   window.AJUSTES3D = {
     PADRAO,
     CONTROLES,
     valores: atual,
     get: (k) => atual[k],
+    escutar: (fn) => ouvintes.push(fn),
     set(k, v) {
       if (!(k in PADRAO)) return;
       atual[k] = Number(v);
       salvar();
-      window.COUP3D?.tune?.();
+      avisar();
     },
     restaurar() {
       Object.assign(atual, PADRAO);
       try {
         localStorage.removeItem(CHAVE);
       } catch {}
-      window.COUP3D?.tune?.();
+      avisar();
     },
     // O que a bancada copia para virar o novo padrão no código.
     paraCodigo() {

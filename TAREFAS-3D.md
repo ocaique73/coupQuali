@@ -201,9 +201,34 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
       o pescoço para no limite
 - [x] Q11. O olhar **é da sala**: todo mundo vê a cabeça dos outros virar
 
+## R. Modelar o personagem
+
+- [x] R1. Tela **/personagem**, em tela cheia: o boneco grande, com luz de
+      estúdio, girando, e uma barra para cada número do corpo. Dentro de uma
+      partida ele aparece pequeno, longe e no escuro — não dava para julgar
+      junta nem chapéu. Dá para trocar manga, corpo, cabeça, cigarro, pele e
+      cor sem sair da tela: o mesmo número tem de ficar bom em todas
+- [x] R2. BUG: **antebraço acima do braço**. Cotovelo, antebraço e mão eram
+      três posições escritas à mão, e o cotovelo estava 12 cm acima de onde o
+      braço de fato acabava. Agora a ponta de cada osso sai do comprimento e
+      do ângulo, então a junta fecha sozinha — mexer numa barra não desmonta
+      o braço. De quebra a mão passou a pousar na altura do tampo
+- [x] R3. BUG: **ombro de gigante**. A bola do ombro era 0.115 contra 0.07 do
+      braço que sai dela. Caiu para 0.09, e virou barra
+- [x] R4. BUG: **boné e chapéu tapando o olho**. A aba do boné ficava em
+      1.772, abaixo da linha dos olhos (1.79); a do chapéu em 1.775. Subiram
+      para acima da sobrancelha, e a do boné ainda inclina para cima
+- [x] R5. **Tronco** com barras (largura em cima, na cintura, altura, quadril)
+      e pendurado na junta do ombro: mexer na altura do tronco desce a
+      cintura, não a cabeça. O padrão deixou de ser triangular
+- [x] R6. Barras de **cabeça** (tamanho) e de **altura do boné/chapéu**
+
 ### O que ainda não foi visto rodando
 
-O servidor e a lógica foram testados (dois clientes de verdade numa sala;
-a página inteira num DOM sem navegador). **O visual desta rodada não** — o
-giro da carta, a luz passeando e a cabeça virando são o que vale olhar
-primeiro no próximo teste.
+O servidor e a lógica foram testados: dois clientes de verdade numa sala, as
+páginas num DOM sem navegador, as rotas respondendo e as contas de geometria
+conferidas no braço (a junta fecha) e no chapéu (a aba passa da sobrancelha).
+
+**O visual não foi visto rodando** — falta WebGL no ambiente onde isto foi
+escrito. O que vale olhar primeiro: o giro da carta, a luz passeando na mesa,
+a cabeça virando e o boneco em /personagem.

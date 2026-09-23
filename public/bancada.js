@@ -101,8 +101,11 @@
 
     const topo = document.createElement("div");
     topo.className = "bcTopo";
+    // O corpo do boneco tem bancada PRÓPRIA (/personagem, tela cheia): aqui
+    // ele aparece pequeno e longe, e não dá para julgar junta nem chapéu.
     topo.innerHTML =
-      '<b>Ajustes do 3D</b><span class="bcNota">vale só para o 3D</span>';
+      '<b>Ajustes do 3D</b><span class="bcNota">vale só para o 3D — ' +
+      'o corpo do boneco é em <a href="/personagem">/personagem</a></span>';
 
     const fechar = document.createElement("button");
     fechar.className = "btn tiny";

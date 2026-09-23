@@ -14,7 +14,6 @@
 
 import * as THREE from "three";
 
-const ARM_X = 0.29; // distância do ombro ao centro do corpo
 const COLORS = [0x3aa6ff, 0x2dd36f, 0xff6ad5, 0xff9d3a, 0xa78bfa, 0x22d3ee];
 
 // feltro e brilho da lâmpada por tema (o 2D já muda; aqui acompanha)
@@ -581,7 +580,12 @@ function poseHand(h, nome) {
 
 // Cabelo, careca, boné ou chapéu de cowboy. Careca não desenha nada: a
 // cabeça de pele já está pronta por baixo.
-function montarCabeca(g, tipo, hairMat, skinMat, darkMat) {
+// O `subir` é a barra da bancada: levanta ou abaixa boné e chapéu sem mexer
+// no resto do rosto.
+//
+// Referências de altura do rosto, para nada voltar a tapar os olhos: olhos em
+// 1.79, sobrancelha em 1.829 (topo ~1.836), alto da cabeça em 1.927.
+function montarCabeca(g, tipo, hairMat, skinMat, darkMat, subir = 0) {
   if (tipo === "bald") return;
 
   if (tipo === "cap" || tipo === "cowboy") {
@@ -596,16 +600,21 @@ function montarCabeca(g, tipo, hairMat, skinMat, darkMat) {
         : new THREE.CylinderGeometry(0.12, 0.155, 0.19, 20),
       corCap,
     );
-    copa.position.y = tipo === "cap" ? 1.775 : 1.86;
+    // a copa do boné fica onde estava: é ali que ela encosta na cabeça toda
+    // em volta. Quem estava baixo demais era a ABA.
+    copa.position.y = (tipo === "cap" ? 1.775 : 1.945) + subir;
     g.add(copa);
 
     if (tipo === "cap") {
-      // aba só na frente
+      // Aba só na frente, ERGUIDA. Estava em 1.772, abaixo dos olhos (1.79):
+      // o boné tapava a cara do boneco. Agora sai acima da sobrancelha e
+      // ainda inclina para cima, como boné de verdade.
       const aba = new THREE.Mesh(
         new THREE.CylinderGeometry(0.2, 0.2, 0.018, 20, 1, false, -0.9, 1.8),
         corCap,
       );
-      aba.position.set(0, 1.772, 0.075);
+      aba.position.set(0, 1.815 + subir, 0.055);
+      aba.rotation.x = -0.22;
       g.add(aba);
     } else {
       // aba em volta, e a fita
@@ -613,14 +622,14 @@ function montarCabeca(g, tipo, hairMat, skinMat, darkMat) {
         new THREE.CylinderGeometry(0.29, 0.29, 0.02, 24),
         corCap,
       );
-      aba.position.y = 1.775;
+      aba.position.y = 1.85 + subir; // acima da sobrancelha (topo 1.835)
       g.add(aba);
 
       const fita = new THREE.Mesh(
         new THREE.CylinderGeometry(0.158, 0.158, 0.045, 20),
         new THREE.MeshStandardMaterial({ color: 0x241509, roughness: 0.9 }),
       );
-      fita.position.y = 1.795;
+      fita.position.y = 1.868 + subir;
       g.add(fita);
     }
     return;
@@ -676,33 +685,58 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
 
   const W = gordo ? 1.32 : 1; // largura do corpo
 
+  // O corpo inteiro pendura da JUNTA DO OMBRO: mudar a altura do tronco na
+  // bancada desce a cintura, não a cabeça. Antes as alturas eram números
+  // soltos e mexer numa desencaixava as outras.
+  const ombroY = aj("ombroAltura", 1.43);
+  const ombroX = aj("ombroLargura", 0.29);
+  const troncoH = aj("troncoAltura", 0.52);
+  const cintura = ombroY - troncoH;
+
   const hips = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.27 * W, 0.3 * W, 0.2, 18),
+    new THREE.CylinderGeometry(
+      aj("quadrilRaio", 0.27) * W,
+      aj("quadrilRaio", 0.27) * 1.1 * W,
+      0.2,
+      18,
+    ),
     darkMat,
   );
-  hips.position.y = 0.84;
+  // 0.03 de sobreposição: encostado exato deixava uma fresta na emenda
+  hips.position.y = cintura - 0.1 + 0.03;
   hips.castShadow = true;
   g.add(hips);
 
   const torso = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.3 * W, 0.23 * W, 0.52, 22),
+    new THREE.CylinderGeometry(
+      aj("troncoOmbro", 0.26) * W,
+      aj("troncoCintura", 0.24) * W,
+      troncoH,
+      22,
+    ),
     shirtMat,
   );
-  torso.position.y = 1.2;
+  torso.position.y = ombroY - troncoH / 2;
   torso.castShadow = true;
   g.add(torso);
 
   if (gordo) {
     const belly = new THREE.Mesh(new THREE.SphereGeometry(0.29, 18, 14), shirtMat);
     belly.scale.set(1.12, 0.78, 0.9);
-    belly.position.set(0, 1.06, 0.06);
+    belly.position.set(0, cintura + troncoH * 0.29, 0.06);
     belly.castShadow = true;
     g.add(belly);
   }
 
+  // Bola do ombro. Era 0.115 contra 0.07 do braço — uma esfera muito maior
+  // do que o braço que sai dela, e o boneco ficava com ombreira de jogador
+  // de futebol americano.
   for (const sx of [-1, 1]) {
-    const sh = new THREE.Mesh(new THREE.SphereGeometry(0.115 * W, 14, 12), shirtMat);
-    sh.position.set(sx * ARM_X * W, 1.43, 0);
+    const sh = new THREE.Mesh(
+      new THREE.SphereGeometry(aj("ombroTamanho", 0.09) * W, 14, 12),
+      shirtMat,
+    );
+    sh.position.set(sx * ombroX * W, ombroY, 0);
     sh.castShadow = true;
     g.add(sh);
   }
@@ -711,14 +745,14 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
     new THREE.CylinderGeometry(0.12, 0.17, 0.09, 16),
     shirtMat,
   );
-  collar.position.y = 1.5;
+  collar.position.y = ombroY + 0.07;
   g.add(collar);
 
   const neck = new THREE.Mesh(
     new THREE.CylinderGeometry(0.075, 0.085, 0.12, 12),
     skinMat,
   );
-  neck.position.y = 1.56;
+  neck.position.y = ombroY + 0.13;
   g.add(neck);
 
   // A CABEÇA INTEIRA num pivô no pescoço, para poder virar para os lados.
@@ -730,6 +764,8 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
   // continuar escrita nas alturas de sempre.
   const cabeca = new THREE.Group();
   cabeca.position.y = PESCOCO;
+  // cresce a partir do pescoço, não do chão
+  cabeca.scale.setScalar(aj("cabecaTamanho", 1));
   const rosto = new THREE.Group();
   rosto.position.y = -PESCOCO;
   cabeca.add(rosto);
@@ -790,7 +826,7 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
   rosto.add(chin);
 
   // cabelo, boné e chapéu também vão no pivô: viram junto com o rosto
-  montarCabeca(rosto, L.head || "hair", hairMat, skinMat, darkMat);
+  montarCabeca(rosto, L.head || "hair", hairMat, skinMat, darkMat, aj("chapeuAltura", 0));
 
   // Braço ESQUERDO segura as cartas; o DIREITO fica livre para os gestos.
   //
@@ -798,54 +834,76 @@ export function buildCharacter({ color = 0, look = null, seed = 0 } = {}) {
   // os dois em zero a pose é a de sempre — mão apoiada na mesa. Girar o
   // cotovelo é o que faz o braço ESTICAR nos gestos, em vez de o boneco só
   // levantar o conjunto todo duro.
+  // Onde cada pedaço do braço TERMINA, calculado — não escrito à mão.
+  //
+  // Era daí que vinha o antebraço flutuando acima do braço: as posições do
+  // cotovelo, do antebraço e da mão eram três números soltos, e bastava um
+  // não bater com o ângulo do braço para a junta abrir. Agora a cápsula é
+  // posta pelo seu TOPO (por isso o -meio) e a ponta sai do comprimento e do
+  // ângulo, então o cotovelo cai sempre onde o braço acaba.
+  const bracoR = aj("bracoGrossura", 0.07) * W;
+  const bracoL = aj("bracoComprimento", 0.24) + bracoR * 2;
+  const bracoA = aj("bracoAngulo", -0.55);
+  const anteR = aj("anteGrossura", 0.058) * W;
+  const anteL = aj("anteComprimento", 0.24) + anteR * 2;
+  const anteA = aj("anteAngulo", -1.25);
+
+  // ponta de uma cápsula de comprimento L girada em X por `a`, saindo da
+  // origem do grupo
+  const ponta = (L, a) => ({ y: -L * Math.cos(a), z: -L * Math.sin(a) });
+  const cotovelo = ponta(bracoL, bracoA);
+  const pulso = ponta(anteL, anteA);
+
   const arms = new THREE.Group();
   const maos = [];
   for (const sx of [-1, 1]) {
     const arm = new THREE.Group();
 
     const upper = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.07 * W, 0.24, 4, 10),
+      new THREE.CapsuleGeometry(bracoR, bracoL - bracoR * 2, 4, 10),
       shirtMat,
     );
-    upper.position.set(0, -0.1, 0.05);
-    upper.rotation.x = -0.55;
+    upper.position.set(0, cotovelo.y / 2, cotovelo.z / 2);
+    upper.rotation.x = bracoA;
     upper.castShadow = true;
     arm.add(upper);
 
     const elbow = new THREE.Group();
-    elbow.position.set(0, -0.2, 0.16);
+    elbow.position.set(0, cotovelo.y, cotovelo.z);
     arm.add(elbow);
 
     // manga longa cobre o antebraço; curta deixa a pele à mostra
     const fore = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.058 * W, 0.24, 4, 10),
+      new THREE.CapsuleGeometry(anteR, anteL - anteR * 2, 4, 10),
       mangaLonga ? shirtMat : skinMat,
     );
-    fore.position.set(0, 0.01, 0.12);
-    fore.rotation.x = -1.25;
+    fore.position.set(0, pulso.y / 2, pulso.z / 2);
+    fore.rotation.x = anteA;
     fore.castShadow = true;
     elbow.add(fore);
 
     if (mangaLonga) {
+      // a boca da manga fica um pouco antes do pulso
+      const recuo = 0.04 / anteL;
       const punho = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.062 * W, 0.062 * W, 0.03, 12),
+        new THREE.CylinderGeometry(anteR * 1.07, anteR * 1.07, 0.03, 12),
         darkMat,
       );
-      punho.rotation.x = -1.25;
-      punho.position.set(0, -0.025, 0.235);
+      punho.rotation.x = anteA;
+      punho.position.set(0, pulso.y * (1 - recuo), pulso.z * (1 - recuo));
       elbow.add(punho);
     }
 
     const hand = buildHand(skinMat);
-    hand.position.set(0, -0.035, 0.28);
-    hand.rotation.x = -0.35;
+    hand.position.set(0, pulso.y, pulso.z);
+    hand.rotation.x = anteA + aj("maoAngulo", 0.9);
     elbow.add(hand);
     arm.userData.hand = hand;
     arm.userData.elbow = elbow;
     maos.push(hand);
 
-    arm.position.set(sx * ARM_X * W, 1.43, 0);
-    arm.userData.x0 = sx * ARM_X * W; // posição de descanso, respeitando o corpo
+    arm.position.set(sx * ombroX * W, ombroY, 0);
+    arm.userData.x0 = sx * ombroX * W; // descanso, respeitando o corpo
     arms.add(arm);
   }
   g.add(arms);
@@ -1632,6 +1690,9 @@ export function tune() {
   ajustarMesa();
   ajustarLampada();
   ajustarAssentos();
+  // Um número do CORPO mudou: os bonecos são remontados no próximo estado.
+  // Zerar a assinatura é o gatilho que o update() já conhece.
+  for (const [, st] of seats) st.lookSig = "";
   if (camera) {
     camera.fov = aj("camAbertura", 64);
     camera.updateProjectionMatrix();

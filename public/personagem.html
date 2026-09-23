@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Coup — modelar personagem</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/personagem.css" />
+  </head>
+  <body class="telaPersonagem">
+    <!-- A cena ocupa a tela inteira; o painel flutua por cima, à direita. -->
+    <div id="palco" class="pgPalco"></div>
+    <div id="aviso" class="pgAviso"></div>
+
+    <div id="painel" class="pgPainel">
+      <div class="pgTopo">
+        <b>Modelar personagem</b>
+        <span class="pgNota">vale para a mesa 3D e para a prévia do perfil</span>
+        <button id="encolher" class="btn tiny" title="Encolher">–</button>
+      </div>
+
+      <!-- Variações: o mesmo número tem de ficar bom em todas elas, então
+           dá para trocar de roupa, corpo e chapéu sem sair da tela. -->
+      <div class="pgVars" id="vars"></div>
+
+      <div class="pgCorpo" id="corpo"></div>
+
+      <div class="pgRodape">
+        <button id="zerar" class="btn small">Restaurar padrão</button>
+        <button id="girar" class="btn small warn">Parar de girar</button>
+        <button id="copiar" class="btn small primary">Copiar para o código</button>
+      </div>
+    </div>
+
+    <div class="pgAjuda">
+      arraste para girar · scroll para aproximar · duplo clique para enquadrar
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+        }
+      }
+    </script>
+    <script src="/ajustes3d.js"></script>
+    <script src="/ui.js"></script>
+    <script type="module" src="/personagem.js"></script>
+  </body>
+</html>

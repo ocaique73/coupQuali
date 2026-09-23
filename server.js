@@ -22,6 +22,14 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, "public")));
 
+// Tela de modelar o personagem. Vem ANTES do catch-all: "personagem" cabe no
+// padrao de codigo de sala e cairia na pagina do jogo. E pagina propria (e
+// nao um modo do index.html, como a bancada de /teste) porque e tela cheia:
+// o HUD, a mesa e os paineis da partida so atrapalhariam.
+app.get("/personagem", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "personagem.html"));
+});
+
 // Qualquer codigo de sala serve a mesma pagina. Ate 16 caracteres porque
 // /teste — a bancada de ajustes do 3D — nao cabia no limite antigo de 4.
 app.get(/^\/([A-Za-z0-9]{1,16})?$/, (req, res) => {

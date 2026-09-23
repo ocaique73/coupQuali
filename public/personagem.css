@@ -1,0 +1,150 @@
+/* Tela de modelar o personagem (/personagem).
+   Fica em arquivo separado do styles.css: nada aqui existe dentro do jogo, e
+   misturar as duas coisas faria a folha da partida carregar regras de uma
+   tela que 99% das visitas nunca abre.
+
+   Reaproveita .bcGrupo / .bcLinha / .bcNome / .bcVal / .bcSaida da bancada
+   de /teste — as barras são as mesmas, e duplicar o estilo faria as duas
+   telas irem divergindo aos poucos. */
+
+.telaPersonagem {
+  margin: 0;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* a cena ocupa a tela inteira; o painel flutua por cima */
+.pgPalco {
+  position: fixed;
+  inset: 0;
+}
+.pgPalco canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pgAviso {
+  position: fixed;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  max-width: 420px;
+  text-align: center;
+  color: var(--muted);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.pgPainel {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  bottom: 14px;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 13, 20, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  z-index: 10;
+}
+.pgPainel.encolhida .pgVars,
+.pgPainel.encolhida .pgCorpo,
+.pgPainel.encolhida .pgRodape {
+  display: none;
+}
+.pgPainel.encolhida {
+  bottom: auto;
+}
+
+.pgTopo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.pgTopo b {
+  font-size: 14px;
+}
+.pgNota {
+  flex: 1;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+/* variações do visual: o mesmo número tem de ficar bom em todas */
+.pgVars {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pgVar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pgVarNome {
+  width: 58px;
+  flex: none;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.pgVarBotoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pgVarBotoes .themeBtn {
+  padding: 3px 9px;
+  font-size: 11px;
+}
+
+/* as barras: rolam sozinhas, o painel inteiro não */
+.pgCorpo {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px 12px;
+}
+
+.pgRodape {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pgAjuda {
+  position: fixed;
+  left: 16px;
+  bottom: 14px;
+  font-size: 11px;
+  color: var(--muted);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* telas estreitas: o painel vira uma faixa embaixo, senão come a cena toda */
+@media (max-width: 760px) {
+  .pgPainel {
+    left: 10px;
+    right: 10px;
+    top: auto;
+    bottom: 10px;
+    width: auto;
+    max-height: 56vh;
+  }
+  .pgAjuda {
+    display: none;
+  }
+}
