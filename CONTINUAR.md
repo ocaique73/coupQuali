@@ -14,6 +14,30 @@ Abra duas abas em `http://localhost:3000/SALA` (o código da sala vem da URL, 1�
 caracteres). Cada aba entra com um nick, ambas ficam READY, e o **host** (👑, o
 primeiro a entrar) clica em *Iniciar*. Mínimo 2 jogadores, máximo 6.
 
+## Onde está no ar
+
+**https://coupquali.onrender.com** — Render, deploy automático a cada push na
+`main`.
+
+> Está escrito aqui porque **não existe nenhum arquivo de deploy no repo**: o
+> Render é configurado pelo painel dele. Sem esta anotação, quem olha só o
+> código conclui que o projeto não tem deploy — que foi exatamente o que
+> aconteceu uma vez.
+
+Depois do `git push` o build do Render leva alguns minutos. O plano free
+ainda **hiberna** depois de ~15 min parado, e o primeiro acesso demora até uns
+50 s para acordar. Nada disso é cache: os arquivos saem com
+`Cache-Control: max-age=0` + ETag, então recarregar a página já pega o novo.
+O que **não** pega sozinho é a aba que ficou aberta desde antes do deploy —
+essa precisa de um F5.
+
+Telas auxiliares, fora da partida:
+
+| rota | para quê |
+| --- | --- |
+| `/teste` | bancada da mesa, luz, lâmpada e câmera |
+| `/personagem` | modelar o boneco, em tela cheia |
+
 ---
 
 ## O que foi feito nesta sessão
@@ -131,6 +155,7 @@ Não há suíte de testes no repo. A validação foi feita com scripts temporár
 > **Nada disso foi testado num navegador real ainda.** A lógica e o gating estão
 > verificados, mas o *visual* das animações (timing, se fica bonito, se enjoa)
 > só dá para julgar jogando. É o primeiro passo sugerido abaixo.
+
 
 ---
 
