@@ -12,12 +12,12 @@
     // ---- mesa ----
     mesaRaio: 2.05, // raio do tampo
     mesaAltura: 0.92, // altura do tampo a partir do chão
-    mesaEspessura: 0.16,
+    mesaEspessura: 0.22,
 
     // ---- personagens ----
     assentoRaio: 2.62, // distância de cada boneco ao centro da mesa
     bonecoEscala: 1.0,
-    bonecoAltura: 0, // sobe ou desce o boneco inteiro
+    bonecoAltura: 0.09, // sobe ou desce o boneco inteiro
     bonecoInclina: 0, // 0 = de pé; positivo deita para a frente
 
     // ---- corpo do boneco (a tela /personagem mexe nisto) ----
@@ -65,9 +65,9 @@
     fichaAfasta: 0.46, // distância das fichas até as cartas
 
     // ---- lâmpada ----
-    lampadaAltura: 4.4, // onde o fio nasce no teto
-    lampadaFio: 1.5, // comprimento do fio
-    lampadaAbajur: 0.45, // raio do abajur
+    lampadaAltura: 4.55, // onde o fio nasce no teto
+    lampadaFio: 1.7, // comprimento do fio
+    lampadaAbajur: 0.42, // raio do abajur
     lampadaAmortece: 0.3, // quanto o balanço perde por segundo
 
     // ---- roupa acesa na vez ----
@@ -83,18 +83,18 @@
     revelaRitmo: 1.0,
 
     // ---- luz ----
-    luzForca: 42, // foco de cima
-    luzAlcance: 14,
-    luzRebote: 13, // o feltro devolvendo luz nos rostos
-    luzAmbiente: 1.0,
+    luzForca: 37, // foco de cima
+    luzAlcance: 7,
+    luzRebote: 12, // o feltro devolvendo luz nos rostos
+    luzAmbiente: 0.35,
     // O quanto a poça de luz PASSEIA pela mesa quando a lâmpada balança.
     // Em 0 a luz fica pregada no centro (era o que acontecia antes).
     luzPasseio: 3.2,
 
     // ---- mau contato ----
     piscaLigado: 1, // 0 desliga
-    piscaCada: 7, // segundos entre as crises
-    piscaQuantas: 3, // apagadas por crise
+    piscaCada: 12, // segundos entre as crises
+    piscaQuantas: 2, // apagadas por crise
     piscaForca: 0.78, // quanto a luz cai (0 a 1)
 
     // ---- câmera ----
