@@ -736,12 +736,11 @@ function montarCabeca(g, tipo, hairMat, skinMat, darkMat) {
   topete.castShadow = true;
   g.add(topete);
 
-  // costeletas: descem na frente da orelha e quebram a linha reta do corte
-  for (const sx of [-1, 1]) {
-    const cost = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.055, 0.05), hairMat);
-    cost.position.set(sx * 0.15, linha - 0.028, 0.012);
-    g.add(cost);
-  }
+  // Aqui havia costeletas. Saíram: eram caixinhas chapadas e o crânio é
+  // curvo, então elas não encostavam em lugar nenhum — de lado viravam uma
+  // plaqueta solta na têmpora. Costeleta que preste teria de seguir a curva
+  // da cabeça, como a calota faz, e não vale o trabalho por um detalhe que
+  // some na distância da mesa.
 }
 
 // A foto do perfil NÃO entra aqui: ela aparece na placa acima da cabeça,

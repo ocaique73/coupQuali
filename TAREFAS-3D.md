@@ -355,10 +355,14 @@ acompanham a cabeça.
       que é o que se quer regular. As faixas foram apertadas para onde o
       número ainda faz efeito — acima do alto da cabeça a calota é aparada e a
       barra andava à toa
-- [x] W5. **Topetezinho** na frente do topo e costeletas na frente da orelha.
-      Pequeno de propósito: o volume grande da tentativa anterior virou
-      capacete. O topete mora no alto da cabeça, não na linha, então subir a
-      linha descobre a testa e ele fica onde estava
+- [x] W5. **Topetezinho** na frente do topo. Pequeno de propósito: o volume
+      grande da tentativa anterior virou capacete. Mora no alto da cabeça e
+      não na linha, então subir a linha descobre a testa e ele fica onde está
+- [x] W7. As **costeletas saíram**. Eram caixinhas chapadas e o crânio é
+      curvo: não encostavam em lugar nenhum e, de lado, viravam uma plaqueta
+      solta na têmpora. Costeleta decente teria de seguir a curva da cabeça
+      como a calota faz, e não vale o trabalho por um detalhe que some na
+      distância da mesa
 - [x] W6. Chapéu de cowboy refeito na mesma lógica: aba dando a volta na
       altura da linha e copa pousada nela
 
