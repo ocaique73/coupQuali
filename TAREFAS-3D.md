@@ -1,6 +1,6 @@
 # Tarefas — paridade 3D e customização
 
-> Atualizado ao fim da rodada. Só D4 segue aberto.
+> Atualizado ao fim da rodada. Só O4 segue aberto (não reproduzido).
 
 Lista fechada a partir do pedido. Marcar conforme entrega.
 
@@ -165,3 +165,45 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
       triângulo, 4 em quadrado
 - [x] P11. Quem perde as duas cartas fica **acinzentado**
 - [x] P12. BUG: na bancada, o chat rápido fazia os bonecos sumirem e voltarem
+
+## Q. Suspense na revelação, e a sala compartilhando a cena
+
+- [x] Q1. **A carta vira antes do veredito.** A resposta aparecia pronta no
+      modal: contestação, bloqueio, assassinato, perda de influência — o
+      jogador lia o final antes de ver qualquer coisa acontecer. Agora cada
+      revelação é uma cena de três tempos (suspense → virada → veredito), com
+      a carta girando na mesa no 2D e no 3D. Nem rápida demais para ninguém
+      ver, nem em câmera lenta
+- [x] Q2. **O resto da tela fica preso** enquanto a carta não virou: log e
+      descarte param na última linha que já era pública, a carta continua de
+      costas e os modais seguintes (perder influência, troca, vitória) só
+      abrem depois. Sem isso a animação seria enfeite — a resposta já estava
+      escrita em outro canto da tela
+- [x] Q3. O suspense **dura igual com blefe ou sem**: se a verdade demorasse
+      mais que o blefe, o relógio entregava a resposta antes da carta
+- [x] Q4. **Ritmo da virada** na bancada, com botão *Ver uma revelação* para
+      acertar a velocidade sem precisar de partida
+- [x] Q5. BUG: a **luz não acompanhava** o balanço da lâmpada. O alvo do foco
+      ficava pendurado dentro da própria lâmpada, girava junto com o abajur e
+      a direção nunca mudava de verdade. Foi para o tampo: a poça de luz
+      passeia pela mesa, com barra de ajuste
+- [x] Q6. BUG: **arraste do abajur invertido**. O empurrão era somado no eixo
+      X do mundo, mas a câmera gira em volta da mesa — de metade dos assentos
+      o "+X" aparece à esquerda. Agora o arraste é no sentido da tela
+- [x] Q7. **Lâmpada é da sala**: quem empurra, todos veem. Viaja o empurrão,
+      não cada quadro do balanço, e quem entra depois acha o abajur onde os
+      outros o veem
+- [x] Q8. **Cabeça num pivô no pescoço**. Antes girava só a esfera do crânio
+      e olhos, nariz e boca ficavam parados — a cabeça girava vazia
+- [x] Q9. **1ª pessoa: olhar para os lados** arrastando, com limite de
+      pescoço, sem levantar da cadeira (a mesa continua firme)
+- [x] Q10. **3ª pessoa: a cabeça acompanha a câmera**. A mesa gira infinito,
+      o pescoço para no limite
+- [x] Q11. O olhar **é da sala**: todo mundo vê a cabeça dos outros virar
+
+### O que ainda não foi visto rodando
+
+O servidor e a lógica foram testados (dois clientes de verdade numa sala;
+a página inteira num DOM sem navegador). **O visual desta rodada não** — o
+giro da carta, a luz passeando e a cabeça virando são o que vale olhar
+primeiro no próximo teste.
