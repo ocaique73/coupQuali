@@ -150,7 +150,7 @@ function montarFixar(A, onde, dizer) {
     // ele aparece pequeno e longe, e não dá para julgar junta nem chapéu.
     topo.innerHTML =
       '<b>Ajustes do 3D</b><span class="bcNota">vale para <b>todas as salas</b>' +
-      ' — some no próximo deploy; use <i>Copiar para o código</i> para fixar.' +
+      ' na hora. Para não perder no próximo deploy, <i>Fixar permanente</i>.' +
       ' O corpo do boneco é em <a href="/personagem">/personagem</a></span>';
 
     const fechar = document.createElement("button");
@@ -284,6 +284,35 @@ function montarFixar(A, onde, dizer) {
 
   /* ------------------------------------------------------------------ */
 
+  // Um socket SÓ para os ajustes.
+  //
+  // A bancada derruba o socket do jogo de propósito (`__coupBancada` troca o
+  // emit por um vazio e desconecta), senão qualquer resposta do servidor
+  // apagaria a mesa de mentira. Quando os ajustes passaram a morar no
+  // servidor, eles caíram nesse mesmo buraco: as barras daqui não mandavam
+  // nada e não recebiam nada, e o "Fixar permanente" ficava esperando uma
+  // resposta que nunca vinha — era o "o servidor não respondeu" da tela.
+  //
+  // A ligação é própria e escuta SÓ "ajustes". Nada de "state" passa por ela,
+  // então a mesa de mentira continua intacta.
+  function ligarAjustes() {
+    if (typeof io !== "function") return;
+    let sock;
+    try {
+      sock = io();
+    } catch (e) {
+      console.error("[bancada]", e);
+      return;
+    }
+    const A = window.AJUSTES3D;
+    if (!A) return;
+    // depois do montarPainel: o último aoSalvar é o que vale, e o do
+    // client.js aponta para o socket morto
+    A.aoSalvar((d) => sock.emit("ajustes", d));
+    A.aoFixar((cb) => sock.emit("ajustes_fixar", {}, cb));
+    sock.on("ajustes", (o) => A.aplicarDeFora(o));
+  }
+
   function ligar() {
     // Entra direto e SEM servidor: clicar em "Entrar" mandaria um join de
     // verdade, e qualquer resposta do servidor apagaria os bonecos de mentira.
@@ -292,6 +321,7 @@ function montarFixar(A, onde, dizer) {
     window.COUP3D?.setMode?.("3d");
     window.__coupAplicarEstado?.(estado());
     montarPainel();
+    ligarAjustes();
 
     // reenvia de tempos em tempos: mantém o cronômetro vivo e reaplica o
     // estado se alguma coisa redesenhar a mesa

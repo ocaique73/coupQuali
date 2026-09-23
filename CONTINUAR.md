@@ -56,8 +56,14 @@ nasce — então o botão grava `ajustes.json` lá. Dois caminhos:
   O token fica só dentro das chamadas do `src/ajustes.js`: não vai para log
   nem para o navegador.
 
-- **sem token:** o botão baixa o `ajustes.json` para commitar na mão. Mesmo
-  resultado, um passo a mais.
+- **sem token:** o botão baixa o `ajustes.json` para commitar na mão (é o que
+  acontece hoje, porque as variáveis não estão configuradas). Mesmo resultado,
+  um passo a mais: jogar o arquivo na raiz do projeto e commitar.
+
+Como criar o token, se quiser o botão fazendo tudo sozinho: GitHub → *Settings*
+→ *Developer settings* → *Personal access tokens* → *Fine-grained tokens*, com
+acesso só a este repositório e permissão **Contents: Read and write**. Depois é
+colar no painel do Render, em *Environment*.
 
 O `ajustes.json` **não** está no `.gitignore` de propósito — se for ignorado,
 "fixar" para de funcionar. O *Copiar para o código* continua existindo para
@@ -67,6 +73,13 @@ E **a bancada não tem dono**: quem abrir `/teste` muda a cena de todo mundo.
 
 A lâmpada é o contrário: **por sala**. Balançar na sala principal não mexe na
 `/22`.
+
+> **A bancada de `/teste` usa um socket próprio** (`ligarAjustes` no
+> `bancada.js`). Ela derruba o socket do jogo de propósito — senão a resposta
+> do servidor apagaria a mesa de mentira — e os ajustes caíram nesse buraco
+> quando passaram a morar no servidor: as barras não mandavam nem recebiam
+> nada. A ligação nova escuta só `ajustes`, então a mesa falsa continua
+> intacta.
 
 Telas auxiliares, fora da partida:
 
