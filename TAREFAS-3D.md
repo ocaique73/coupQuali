@@ -333,6 +333,35 @@ Lista fechada a partir do pedido. Marcar conforme entrega.
       fecha, a bola do ombro é 0.09 e as abas do boné e do chapéu seguem acima
       da sobrancelha
 
+## W. Boné e cabelo colados no crânio
+
+Os três prints mostraram a mesma causa por trás dos dois defeitos: cabelo e
+boné eram **meia esfera de raio fixo pousada numa altura**, e não peças que
+acompanham a cabeça.
+
+- [x] W1. BUG: **aba do boné no meio da copa.** A aba estava em 1.815 e a
+      borda da copa em 1.775 — a aba passava 4 cm *acima* da borda e cortava o
+      boné pelo meio. Agora ela nasce exatamente na borda, que é onde fica a
+      aba de um boné de verdade
+- [x] W2. BUG: **boné e cabelo tapando a testa.** A borda caía em 1.775 (boné)
+      e 1.757 (cabelo), abaixo da sobrancelha (topo 1.836) e quase no olho
+      (1.790). As linhas subiram para 1.858 e 1.846
+- [x] W3. BUG: **subir o cabelo o tirava da cabeça.** O crânio afina para cima
+      e a peça tinha raio fixo: em 1.76 a cabeça tem raio 0.156, em 1.88 tem
+      0.104 — subir só afastava a borda. Agora a peça é uma **esfera
+      concêntrica com o crânio**, cortada na altura da linha: encosta em todo
+      o contorno, e subir **corta mais** em vez de descolar
+- [x] W4. As barras de altura passaram a mover a **linha do corte na testa**,
+      que é o que se quer regular. As faixas foram apertadas para onde o
+      número ainda faz efeito — acima do alto da cabeça a calota é aparada e a
+      barra andava à toa
+- [x] W5. **Topetezinho** na frente do topo e costeletas na frente da orelha.
+      Pequeno de propósito: o volume grande da tentativa anterior virou
+      capacete. O topete mora no alto da cabeça, não na linha, então subir a
+      linha descobre a testa e ele fica onde estava
+- [x] W6. Chapéu de cowboy refeito na mesma lógica: aba dando a volta na
+      altura da linha e copa pousada nela
+
 ### O que ainda não foi visto rodando
 
 O servidor e a lógica foram testados: dois clientes de verdade numa sala, as

@@ -58,6 +58,13 @@ const lampFis = { z: 0, x: 0, vz: 0, vx: 0, t0: 0 };
 const LAMP_MAX = 0.55; // até onde dá para empurrar, em radianos
 // Altura do pescoço: é em volta deste ponto que a cabeça vira.
 const PESCOCO = 1.62;
+
+// O CRÂNIO, num lugar só. Cabelo e boné são calotas concêntricas com ele, e
+// se cada um chutasse o próprio raio a peça descolaria da cabeça.
+const CRANIO = { y: 1.74, r: 0.17, sx: 0.92, sy: 1.1, sz: 0.96 };
+// referências do rosto, para nada voltar a tapar os olhos
+const OLHO_Y = 1.79;
+const SOBRANCELHA_Y = 1.836;
 // TETO do quanto a cabeça vira. É o mesmo número do servidor (LOOK_MAX): o
 // valor da barra fica por baixo dele, então nada que a cena mande é recusado
 // do outro lado. A mesa gira infinito; o pescoço nunca.
@@ -600,6 +607,48 @@ function poseHand(h, nome) {
 //
 // Referências do rosto, para nada voltar a tapar os olhos: olhos em 1.79,
 // topo da sobrancelha em ~1.845, alto da cabeça em 1.927.
+// Calota que ACOMPANHA o crânio, cortada na altura da linha do cabelo.
+//
+// Cabelo e boné eram meia esfera de raio FIXO pousada numa altura. Dois
+// defeitos vinham daí, e são os dois que apareciam na tela:
+//
+//  1. embaixo a borda era mais larga que a cabeça (uns 2 cm sobrando), o que
+//     virava um friso preto em volta da testa;
+//  2. a cabeça AFINA para cima, então subir a peça só afastava a borda — era
+//     por isso que "subir o cabelo" o tirava da cabeça em vez de descobrir a
+//     testa.
+//
+// Aqui a peça é uma esfera concêntrica com o crânio, um pouco maior, cortada
+// no ângulo que cai exatamente na altura pedida. Ela encosta em todo o
+// contorno, e subir a linha CORTA mais em vez de descolar.
+// O teto: acima disto a calota fica menor que um dedal e a pessoa perde o
+// cabelo sem entender por quê. A barra continua indo até lá, mas para aqui.
+const LINHA_MAX = CRANIO.y + CRANIO.r * CRANIO.sy - 0.055;
+
+function calotaCraniana(mat, linhaY, folga = 1.05) {
+  linhaY = Math.min(linhaY, LINHA_MAX);
+  const meioY = CRANIO.r * CRANIO.sy * folga;
+  // cos(phi) = o quanto o corte está acima do centro, em meios-eixos
+  const cos = Math.max(-0.9, Math.min(0.96, (linhaY - CRANIO.y) / meioY));
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(
+      CRANIO.r * folga, 30, 22, 0, Math.PI * 2, 0, Math.acos(cos),
+    ),
+    mat,
+  );
+  m.scale.set(CRANIO.sx, CRANIO.sy, CRANIO.sz);
+  m.position.y = CRANIO.y;
+  m.castShadow = true;
+  return m;
+}
+
+// Raio do crânio (em z, que é a direção da testa) na altura do corte: é onde
+// a aba do boné tem de nascer para não flutuar nem entrar na cabeça.
+function craneoRaioZ(linhaY, folga = 1.05) {
+  const t = (Math.min(linhaY, LINHA_MAX) - CRANIO.y) / (CRANIO.r * CRANIO.sy * folga);
+  return CRANIO.r * CRANIO.sz * folga * Math.sqrt(Math.max(0, 1 - t * t));
+}
+
 function montarCabeca(g, tipo, hairMat, skinMat, darkMat) {
   if (tipo === "bald") return;
 
@@ -616,59 +665,83 @@ function montarCabeca(g, tipo, hairMat, skinMat, darkMat) {
       roughness: 0.85,
     });
 
-    const copa = new THREE.Mesh(
-      tipo === "cap"
-        ? new THREE.SphereGeometry(0.175, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2)
-        : new THREE.CylinderGeometry(0.12, 0.155, 0.19, 20),
+    if (tipo === "cap") {
+      // A linha do boné fica acima da sobrancelha: mais baixo que isso ele
+      // tapa a testa inteira, que era o defeito.
+      // 1.858 deixa uma faixa de testa à mostra entre a sobrancelha (topo em
+      // 1.836) e a borda do boné, e é essa folga que a aba ocupa sem raspar.
+      const linha = Math.min(1.858 + subir, LINHA_MAX);
+      g.add(calotaCraniana(corCap, linha));
+
+      // A ABA NASCE NA BORDA DA COPA. Antes ela ficava 4 cm acima dessa
+      // borda e cortava o meio do boné — era o "aba no meio".
+      const frente = craneoRaioZ(linha);
+      const compAba = 0.115;
+      const raioAba = 0.185;
+      const aba = new THREE.Mesh(
+        // disco parcial: só o pedaço da frente, como aba de boné
+        new THREE.CylinderGeometry(raioAba, raioAba, 0.016, 22, 1, false, -1.0, 2.0),
+        corCap,
+      );
+      // o disco é centrado, então recua metade dele para a ponta cair na
+      // distância certa à frente da testa
+      aba.position.set(0, linha - 0.008, frente + compAba - raioAba);
+      aba.rotation.x = -0.16; // levanta a ponta, como aba de verdade
+      aba.castShadow = true;
+      g.add(aba);
+      return;
+    }
+
+    // chapéu de cowboy: copa reta pousada na aba, que dá a volta na cabeça
+    const linhaCh = 1.852 + subir;
+    const aba = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.285, 0.285, 0.018, 26),
       corCap,
     );
-    // a copa do boné fica onde estava: é ali que ela encosta na cabeça toda
-    // em volta. Quem estava baixo demais era a ABA.
-    copa.position.y = (tipo === "cap" ? 1.775 : 1.945) + subir;
+    aba.position.y = linhaCh;
+    aba.castShadow = true;
+    g.add(aba);
+
+    const copa = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.125, 0.16, 0.175, 22),
+      corCap,
+    );
+    copa.position.y = linhaCh + 0.086;
+    copa.castShadow = true;
     g.add(copa);
 
-    if (tipo === "cap") {
-      // Aba só na frente, ERGUIDA. Estava em 1.772, abaixo dos olhos (1.79):
-      // o boné tapava a cara do boneco. Agora sai acima da sobrancelha e
-      // ainda inclina para cima, como boné de verdade.
-      const aba = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.2, 0.2, 0.018, 20, 1, false, -0.9, 1.8),
-        corCap,
-      );
-      aba.position.set(0, 1.815 + subir, 0.055);
-      aba.rotation.x = -0.22;
-      g.add(aba);
-    } else {
-      // aba em volta, e a fita
-      const aba = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.29, 0.29, 0.02, 24),
-        corCap,
-      );
-      aba.position.y = 1.85 + subir; // acima da sobrancelha (topo 1.835)
-      g.add(aba);
-
-      const fita = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.158, 0.158, 0.045, 20),
-        new THREE.MeshStandardMaterial({ color: 0x241509, roughness: 0.9 }),
-      );
-      fita.position.y = 1.868 + subir;
-      g.add(fita);
-    }
+    const fita = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.163, 0.163, 0.04, 22),
+      new THREE.MeshStandardMaterial({ color: 0x241509, roughness: 0.9 }),
+    );
+    fita.position.y = linhaCh + 0.03;
+    g.add(fita);
     return;
   }
 
-  // cabelo. O `subir` é a barra "Altura do cabelo" da bancada.
-  const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.178, 24, 18, 0, Math.PI * 2, 0, Math.PI / 1.85),
-    hairMat,
-  );
-  hair.scale.set(0.95, 1.1, 1);
-  hair.position.y = 1.757 + subir;
-  g.add(hair);
+  // CABELO. A linha nasce logo acima da sobrancelha — descia até o olho e
+  // fechava a testa. O `subir` mexe nessa linha, e como a calota acompanha o
+  // crânio, subir agora DESCOBRE a testa em vez de tirar o cabelo da cabeça.
+  const linha = Math.min(1.846 + subir, LINHA_MAX);
+  g.add(calotaCraniana(hairMat, linha, 1.055));
 
-  const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.05), hairMat);
-  fringe.position.set(0, 1.85 + subir, 0.118);
-  g.add(fringe);
+  // Topetezinho: uma massa achatada saindo da frente do topo. É pequeno de
+  // propósito — o volume grande que tentei antes virou capacete.
+  const topete = new THREE.Mesh(new THREE.SphereGeometry(0.085, 18, 14), hairMat);
+  topete.scale.set(1.35, 0.5, 0.85);
+  // o topete mora no ALTO da cabeça, não na linha do cabelo: subir a linha
+  // descobre a testa e o topete fica onde estava, em vez de voar junto
+  topete.position.set(0, 1.908, 0.055);
+  topete.rotation.x = -0.3;
+  topete.castShadow = true;
+  g.add(topete);
+
+  // costeletas: descem na frente da orelha e quebram a linha reta do corte
+  for (const sx of [-1, 1]) {
+    const cost = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.055, 0.05), hairMat);
+    cost.position.set(sx * 0.15, linha - 0.028, 0.012);
+    g.add(cost);
+  }
 }
 
 // A foto do perfil NÃO entra aqui: ela aparece na placa acima da cabeça,

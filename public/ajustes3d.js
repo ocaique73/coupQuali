@@ -45,6 +45,11 @@
     // Uma altura POR tipo: boné, chapéu e cabelo assentam em alturas
     // diferentes, e uma barra só fazia um subir demais enquanto o outro
     // ainda estava baixo.
+    //
+    // O que estas barras movem é a LINHA do corte — onde o cabelo ou o boné
+    // acaba na testa. Negativo desce a linha e cobre mais testa; positivo
+    // sobe e descobre. A peça acompanha o crânio, então nenhum valor a
+    // descola da cabeça.
     boneAltura: 0,
     chapeuAltura: 0,
     cabeloAltura: 0,
@@ -135,9 +140,11 @@
     ]],
     ["Cabeça e chapéu", [
       ["cabecaTamanho", "Tamanho da cabeça", 0.6, 1.5, 0.01],
-      ["boneAltura", "Altura do boné", -0.12, 0.2, 0.005],
-      ["chapeuAltura", "Altura do chapéu", -0.12, 0.2, 0.005],
-      ["cabeloAltura", "Altura do cabelo", -0.1, 0.15, 0.005],
+      // as faixas param onde o número ainda faz alguma coisa: acima do alto
+      // da cabeça a calota é aparada e a barra andava à toa
+      ["boneAltura", "Linha do boné na testa", -0.07, 0.02, 0.002],
+      ["chapeuAltura", "Altura do chapéu", -0.07, 0.09, 0.002],
+      ["cabeloAltura", "Linha do cabelo na testa", -0.07, 0.03, 0.002],
     ]],
     ["Cartas e fichas", [
       ["cartaTamanho", "Tamanho da carta", 0.5, 2, 0.02],
